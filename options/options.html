@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Custom Dark Mode</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="brand">
+        <div class="orb" aria-hidden="true"></div>
+        <div>
+          <div class="title">Custom Dark Mode</div>
+          <h1 class="subtitle" data-i18n="backupTitle">Export and import settings</h1>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="actions">
+          <button id="export" class="action" type="button" data-i18n="backupExport">Export settings</button>
+          <button id="import" class="action" type="button" data-i18n="backupImport">Import settings</button>
+        </div>
+        <p class="hint" data-i18n="backupHint">The exported file holds the site library with all rules, the language and the sort order. On import, sites from the file replace the entries for the same sites; other sites stay.</p>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <input id="file" type="file" accept="application/json,.json" hidden />
+      </section>
+    </main>
+
+    <script src="../shared/rules.js"></script>
+    <script src="../shared/site-utils.js"></script>
+    <script src="../shared/requests.js"></script>
+    <script src="../shared/backup.js"></script>
+    <script src="../popup/translations.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

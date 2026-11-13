@@ -1,0 +1,56 @@
+/* Screen only: printing and "Save as PDF" keep the site's own colors. */
+@media screen {
+  html.dmx-on.dmx-site-universal:not(.dmx-mode-selected) {
+    color-scheme: light;
+    filter: invert(90%) hue-rotate(180deg);
+  }
+
+  /* Until the controller has examined the page, the first-paint script keeps the
+     otherwise unfiltered canvas white. Zero specificity: any site background wins. */
+  :where(html.dmx-boot.dmx-on.dmx-site-universal:not(.dmx-mode-selected)) {
+    background-color: #fff;
+  }
+
+  /* Browsers clamp invert() to 100%: this equals invert(100%). The page filter's
+     output range (10–90%) makes an exact inverse impossible, so media colors are
+     approximate by design. */
+  :where(html.dmx-on.dmx-site-universal:not(.dmx-mode-selected)) img,
+  :where(html.dmx-on.dmx-site-universal:not(.dmx-mode-selected)) video,
+  :where(html.dmx-on.dmx-site-universal:not(.dmx-mode-selected)) iframe,
+  :where(html.dmx-on.dmx-site-universal:not(.dmx-mode-selected)) [style*="background-image"] {
+    filter: invert(111%) hue-rotate(180deg) !important;
+  }
+
+  html.dmx-on.dmx-site-universal:not(.dmx-mode-selected) canvas {
+    filter: none !important;
+  }
+
+  :where(html.dmx-on.dmx-site-universal:not(.dmx-mode-selected)) [style*="background-image"] :is(img, video, iframe, [style*="background-image"]) {
+    filter: none !important;
+  }
+
+  /* Fullscreen elements, modal dialogs and open popovers render in the top layer,
+     outside the page filter, so each one carries that filter itself. */
+  html.dmx-on.dmx-site-universal:not(.dmx-mode-selected) :is(:fullscreen, :modal, :popover-open):not(video):not(img):not(iframe):not(canvas):not([data-hdm-picker]) {
+    filter: invert(90%) hue-rotate(180deg) !important;
+  }
+
+  html.dmx-on.dmx-site-universal:not(.dmx-mode-selected) :is(video, img, iframe):is(:fullscreen, :modal, :popover-open) {
+    filter: none !important;
+  }
+
+  /* Media compensation starts again at each independent top-layer surface. */
+  @scope (:where(html.dmx-on.dmx-site-universal:not(.dmx-mode-selected)) :is(:fullscreen, :modal, :popover-open)) to (:fullscreen, :modal, :popover-open) {
+    :scope :is(img, video, iframe, [style*="background-image"]) {
+      filter: invert(100%) hue-rotate(180deg) !important;
+    }
+    :scope [style*="background-image"] :is(img, video, iframe, [style*="background-image"]) {
+      filter: none !important;
+    }
+  }
+  /* A scrim must stay dark: inversion would turn a native black scrim white.
+     Ten percent brightness maps an opaque white scrim to the page's dark range. */
+  html.dmx-on.dmx-site-universal:not(.dmx-mode-selected) :is(:modal, :popover-open)::backdrop {
+    filter: brightness(10%) !important;
+  }
+}

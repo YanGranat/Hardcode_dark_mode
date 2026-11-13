@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "Custom Dark Mode"
+  },
+  "extensionDescription": {
+    "message": "Настройте свою тёмную тему: инвертируйте всю страницу или только выбранные блоки."
+  },
+  "extensionActionTitle": {
+    "message": "Custom Dark Mode"
+  }
+}

@@ -1,0 +1,38 @@
+# Development documentation (internal)
+dev_docs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Logs
+*.log
+console-*.log
+
+# Temp files
+temporary_files/
+*.tmp
+*.temp
+output/
+.playwright-cli/
+.playwright-mcp/
+.codex-research/
+
+# Backups
+backup/
+backup*/
+*.bak
+
+# Local agent files
+.claude/
+.codex/
+.cursor/
+.agent/

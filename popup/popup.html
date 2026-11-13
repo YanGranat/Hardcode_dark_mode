@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Custom Dark Mode</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="top">
+        <div class="brand">
+          <div class="orb" aria-hidden="true"></div>
+          <div class="brand-copy">
+            <div class="title">Custom Dark Mode</div>
+            <div class="subtitle" data-i18n="subtitle">Your page, your dark theme</div>
+          </div>
+        </div>
+        <div class="language-switch" role="group" aria-label="Interface language" data-i18n-aria-label="languageSelector">
+          <button type="button" class="language-btn" data-language="en" aria-label="English">EN</button>
+          <button type="button" class="language-btn" data-language="ru" aria-label="Русский">RU</button>
+        </div>
+      </header>
+
+      <section class="card universal-card">
+        <div class="card-title" data-i18n="currentSiteHeading">Current site</div>
+        <div class="current-site-row">
+          <div class="site-copy">
+            <div id="current-site-name" class="label">...</div>
+            <div id="current-site-status" class="hint">Loading...</div>
+          </div>
+          <div class="current-site-actions">
+            <label id="current-site-switch" class="switch compact" hidden>
+              <input id="current-site-enabled" type="checkbox" disabled aria-label="Enable dark theme" data-i18n-aria-label="currentSiteTheme" />
+              <span class="slider"></span>
+            </label>
+            <button id="current-site-action" class="site-action" type="button" disabled>Add site</button>
+          </div>
+        </div>
+
+        <div id="exclusions" hidden>
+          <div class="theme-mode" role="group" aria-label="What to invert" data-i18n-aria-label="themeMode">
+            <button type="button" data-mode="page" aria-pressed="true" data-i18n="modePage">Whole page</button>
+            <button type="button" data-mode="selected" aria-pressed="false" data-i18n="modeSelected">Selected blocks</button>
+          </div>
+          <button id="pick-element" class="site-action" type="button">Exclude element</button>
+          <details id="exclusion-details">
+            <summary><span data-i18n="exclusions">Excluded elements</span> <span id="exclusion-count">0</span></summary>
+            <div id="exclusion-list"></div>
+          </details>
+          <details id="protection-details" hidden>
+            <summary><span data-i18n="protections">Previously saved exceptions</span> <span id="protection-count">0</span></summary>
+            <div id="protection-list"></div>
+          </details>
+        </div>
+
+        <div class="library-heading">
+          <div class="library-caption">
+            <div class="library-title" data-i18n="library">Library</div>
+            <div id="library-count" class="library-count">0</div>
+          </div>
+          <div class="library-tools">
+          <div class="library-backup">
+            <button id="library-backup" type="button" aria-label="Export and import settings" data-i18n-aria-label="backupTitle" data-i18n-title="backupTitle" aria-haspopup="menu" aria-expanded="false" aria-controls="library-backup-menu">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 17V7m0 0-3 3m3-3 3 3m5-3v10m0 0-3-3m3 3 3-3"/></svg>
+            </button>
+            <div id="library-backup-menu" class="menu" role="menu" aria-label="Export and import settings" data-i18n-aria-label="backupTitle" hidden>
+              <button type="button" role="menuitem" tabindex="-1" data-backup="export"><span data-i18n="backupExport">Export settings</span></button>
+              <button type="button" role="menuitem" tabindex="-1" data-backup="import"><span data-i18n="backupImport">Import settings</span></button>
+            </div>
+          </div>
+          <div class="library-sort">
+            <button id="library-sort" type="button" value="alphabetical" aria-label="Sort library: Alphabetical" aria-haspopup="menu" aria-expanded="false" aria-controls="library-sort-menu">
+              <span id="library-sort-label">Alphabetical</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div id="library-sort-menu" class="menu sort-menu" role="menu" aria-label="Sort library" data-i18n-aria-label="sortLibrary" hidden>
+              <button type="button" role="menuitemradio" aria-checked="true" tabindex="-1" data-sort="alphabetical"><span data-i18n="sortAlphabetical">Alphabetical</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button>
+              <button type="button" role="menuitemradio" aria-checked="false" tabindex="-1" data-sort="newest"><span data-i18n="sortNewest">Newest added</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button>
+              <button type="button" role="menuitemradio" aria-checked="false" tabindex="-1" data-sort="oldest"><span data-i18n="sortOldest">Oldest added</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button>
+            </div>
+          </div>
+          </div>
+        </div>
+        <div id="library-empty" class="library-empty" data-i18n="libraryEmpty">No sites added yet.</div>
+        <div id="library-list" class="site-list"></div>
+      </section>
+
+      <div id="toast" class="toast" role="status" aria-live="polite"><span id="toast-text"></span><button id="toast-action" type="button" hidden></button></div>
+      <input id="backup-file" type="file" accept="application/json,.json" hidden />
+    </div>
+
+    <script src="../shared/rules.js"></script>
+    <script src="../shared/site-utils.js"></script>
+    <script src="../shared/requests.js"></script>
+    <script src="../shared/backup.js"></script>
+    <script src="translations.js"></script>
+    <script src="state.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
