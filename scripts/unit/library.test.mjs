@@ -54,8 +54,7 @@ test("only whole-page sites register the first-paint script, and a mode change r
 
 test("registration identifiers are the site addresses, so two sites can never share one", async () => {
   const { state, send } = worker();
-  // The first two addresses collided under the former 32-bit hash.
-  // The last two differ only by what used to be the suffix of the page-world script.
+  // Keep distinct origins and shadow-like hostnames in separate registration namespaces.
   const urls = ["https://s27542.test", "https://s232100.test", "https://aa.test", "https://ab.test", "http://build", "http://build-shadow", "http://build#shadow"];
   for (const url of urls) assert.equal((await send(add(url))).ok, true);
   assert.equal(state.sites.length, 6, "a fragment is not part of a site address");

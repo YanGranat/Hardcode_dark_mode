@@ -142,8 +142,8 @@ try {
   vm.runInContext(read("shared/rules.js"), siteContext, { filename: "shared/rules.js" });
   vm.runInContext(siteUtilsSource, siteContext, { filename: "shared/site-utils.js" });
   const utility = siteContext.HdmSites;
-  for (const url of ["https://deepl.com/", "https://www.deepl.com/", "https://translate.google.com/"]) {
-    if (!utility.normalizeStoredSite({ origin: url })) fail("shared/site-utils.js: former profile sites must be eligible for the library");
+  for (const url of ["https://example.com/", "https://www.example.com/", "https://editor.example.com/"]) {
+    if (!utility.normalizeStoredSite({ origin: url })) fail("shared/site-utils.js: HTTPS origins must be eligible for the library");
   }
   const firstPort = utility.fromUrl("http://localhost:3000/");
   const secondPort = utility.fromUrl("http://localhost:4000/");

@@ -101,7 +101,7 @@ await harness.run(async () => {
   assert.equal((await send({ type: "hdm-exclusion-add", origin, rule: { path: ["#slide-a"], label: "svg" } })).ok, true);
   await page.locator('#slide-a[data-hdm-excluded="root"]').waitFor();
   const approximate = await capture("#first svg");
-  assert.notDeepEqual(approximate, original, "Whole-page exclusions retain their documented approximate colors");
+  assert.notDeepEqual(approximate, original, "Whole-page compensation differs from the unfiltered sample");
   assert.notDeepEqual(approximate, inverted);
   assert(approximate[0].slice(0, 3).every(value => value < 110));
   assert.deepEqual(await capture("#second svg"), inverted, "An old exact rule must not silently expand");

@@ -129,7 +129,7 @@ await harness.run(async () => {
   await popup.waitForFunction(() => document.documentElement.lang === "ru");
   assert.equal(await popup.locator('[data-language="ru"]').getAttribute("aria-checked"), "true");
   assert.equal(await popup.locator('#toggle-deepl, #toggle-google, [data-theme]').count(), 0);
-  console.log("PASS popup language persistence, rapid changes and removal of retired controls");
+  console.log("PASS popup language persistence, rapid changes and library-only theme controls");
   harness.deadline();
 
   assert.equal(await worker.evaluate(() => (chrome.runtime.getManifest().content_scripts || []).length), 0);
@@ -187,7 +187,7 @@ await harness.run(async () => {
     await sitePopup.close(); await retired.close();
     await context.unroute(pattern);
   }
-  console.log("PASS both retired profiles: no automatic theme despite legacy settings; popup Add/exclusions/Pause/Enable/Remove and reload");
+  console.log("PASS legacy settings do not enable automatic themes; popup Add/exclusions/Pause/Enable/Remove and reload");
   harness.deadline();
 
   if (process.env.HDM_LIVE === "1") {
@@ -204,7 +204,7 @@ await harness.run(async () => {
       await live.waitForFunction(() => !document.documentElement.classList.contains("dmx-site-universal"));
       await live.close();
     }
-    console.log("PASS live former-profile sites: manual activation and removal");
+    console.log("PASS live manual activation and removal");
   }
   await context.close();
   context = await harness.launch();

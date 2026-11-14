@@ -402,18 +402,18 @@ test("mode and rule writes finish without scanning or waiting for a stalled page
   }
 });
 
-test("DeepL library entries are saved and immediately applied to matching documents", async () => {
+test("library entries are saved and immediately applied to matching documents", async () => {
   const { send, state, api } = worker();
-  api.tabs.query = async () => [{ id: 1, url: "https://www.deepl.com/translator" }];
+  api.tabs.query = async () => [{ id: 1, url: "https://editor.example.com/workspace" }];
   api.scripting.executeScript = async arg => arg.func ? [
-    { documentId: "deepl", result: "https://www.deepl.com/translator" }
+    { documentId: "editor", result: "https://editor.example.com/workspace" }
   ] : [];
-  assert.equal((await send(add("https://www.deepl.com/translator"))).ok, true);
-  assert.equal(state.sites[0].origin, "https://www.deepl.com");
+  assert.equal((await send(add("https://editor.example.com/workspace"))).ok, true);
+  assert.equal(state.sites[0].origin, "https://editor.example.com");
   assert.equal(state.inserted.length, 1);
-  assert.deepEqual(clone(state.inserted[0].target.documentIds), ["deepl"]);
+  assert.deepEqual(clone(state.inserted[0].target.documentIds), ["editor"]);
   assert.equal((await send({ type: "hdm-universal-get-sites" })).sites.length, 1);
-  await send(toggle("https://www.deepl.com", false));
+  await send(toggle("https://editor.example.com", false));
   assert.equal(state.sites[0].enabled, false);
   assert.equal(state.scripts.length, 0);
 });

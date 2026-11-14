@@ -141,8 +141,8 @@ await harness.run(async () => {
   }
   await panel.locator('[data-action="save"]').click(); await panel.waitFor({ state: 'detached' });
   assert.equal((await stored()).inclusions[0].protections.length, 2);
-  assert.equal((await stored()).protections.length, 0, 'New exceptions belong to their block, not the old global list');
-  assert.equal(await popup.locator('#protect-element').count(), 0, 'Standalone original-color selection is retired');
+  assert.equal((await stored()).protections.length, 0, 'Block exceptions must not create site-level protections');
+  assert.equal(await popup.locator('#protect-element').count(), 0, 'Selected-block exceptions are configured inside the block editor');
   await page.waitForFunction(() => document.querySelector('#workspace').getAttribute('data-hdm-cutout') === 'mask', null, { timeout: 5000 }).catch(async error => {
     console.error('Cutout diagnostics', await page.evaluate(() => ({ owner: document.querySelector('#workspace').outerHTML.slice(0, 400), filters: document.querySelectorAll('filter').length })), errors);
     throw error;
