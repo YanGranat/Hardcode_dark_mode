@@ -48,12 +48,31 @@ function fixture({ ratio } = {}) {
       }
     }
   });
-  load(context, "shared/rules.js", "content/selectors.js", "content/cutouts.js");
+  load(context, "shared/rules.js", "content/selectors.js", "content/cutout-geometry.js", "content/cutouts.js");
   const api = context.HdmCutouts.create();
   const node = (parent = document.documentElement, name = "div") => parent.appendChild(new Element(name));
   const filters = () => document.documentElement.children.filter(node => node.localName === "svg").flatMap(node => node.children);
-  return { api, node, counts, document, filters };
+  return { api, node, counts, document, filters, plan: context.HdmCutoutGeometry.plan };
 }
+
+test("geometry plans read the page without mutating it or retaining earlier results", () => {
+  const h = fixture(), owner = h.node(), target = h.node(owner);
+  owner.box = box(10, 20, 200, 100);
+  owner.offsetWidth = owner.clientWidth = 200;
+  target.box = box(50, 30, 80, 30);
+  const before = { ...h.counts };
+  const first = h.plan(new Map([[owner, 90]]), [target]);
+  assert.equal(h.counts.attributes, before.attributes);
+  assert.equal(h.counts.tree, before.tree);
+  assert.equal(first.trackGeometry, true);
+  assert.equal(first.updates.get(owner).blocked, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(first.updates.get(owner).rects)), [[0.2, 0.1, 0.4, 0.3]]);
+  target.box = box(70, 40, 80, 30);
+  const second = h.plan(new Map([[owner, 90]]), [target]);
+  assert.deepEqual(JSON.parse(JSON.stringify(second.updates.get(owner).rects)), [[0.3, 0.2, 0.4, 0.3]]);
+  assert.deepEqual(JSON.parse(JSON.stringify(first.updates.get(owner).rects)), [[0.2, 0.1, 0.4, 0.3]]);
+  assert.equal(h.filters().length, 0);
+});
 
 test("cutouts retain SourceGraphic within an sRGB mask without requiring secure-context UUIDs", () => {
   const h = fixture(), owner = h.node(), target = h.node(owner);
@@ -66,6 +85,8 @@ test("cutouts retain SourceGraphic within an sRGB mask without requiring secure-
   const original = filter.children.find(node => node.getAttribute("result") === "original");
   assert.equal(original.getAttribute("in"), "SourceGraphic");
   assert.equal(original.getAttribute("operator"), "in");
+  const mask = filter.children.find(node => node.localName === "feFlood");
+  assert.deepEqual(["x", "y", "width", "height"].map(name => Number(mask.getAttribute(name))), [0.2, 0.1, 0.4, 0.3]);
   const sum = filter.children.at(-1);
   assert.equal(sum.getAttribute("operator"), "arithmetic");
   assert.equal(sum.getAttribute("k2"), "1"); assert.equal(sum.getAttribute("k3"), "1");
@@ -152,55 +173,48 @@ test("clipping and axis-aligned scaling normalize mask coordinates without prote
   clip.clientWidth = clip.clientHeight = 40; clip.css.overflowX = clip.css.overflowY = "hidden";
   target.box = box(60, 40, 100, 80);
   h.api.paint(new Map([[owner, 90]]), [target]);
-  const flood = h.filters()[0].children.find(node => node.localName === "feFlood");
-  assert.equal(flood.getAttribute("x"), "0.3"); assert.equal(flood.getAttribute("y"), "0.2");
-  assert.equal(flood.getAttribute("width"), "0.2"); assert.equal(flood.getAttribute("height"), "0.3");
+  assert.deepEqual(Array.from(h.plan(new Map([[owner, 90]]), [target]).updates.get(owner).rects[0]), [0.3, 0.2, 0.2, 0.3]);
 });
 
 test("fractional mask edges follow the whole-pixel rounding of painted boxes", () => {
-  const flood = (h, owner, target) => {
-    h.api.paint(new Map([[owner, 90]]), [target]);
-    const node = h.filters()[0].children.find(node => node.localName === "feFlood");
-    return ["x", "y", "width", "height"].map(name => Number(node.getAttribute(name)));
-  };
+  const plannedRect = (h, owner, target) => Array.from(h.plan(new Map([[owner, 90]]), [target]).updates.get(owner).rects[0]);
   const near = (actual, expected, message) => actual.forEach((value, index) =>
     assert(Math.abs(value - expected[index]) < 1e-9, `${message}: ${actual} instead of ${expected}`));
   let h = fixture(), owner = h.node(), target = h.node(owner);
   // The owner's corner rounds to (0, 1); the target's edges to 21, 10, 61 and 41.
   owner.box = box(0.3, 0.7, 100, 100); target.box = box(20.5, 10.25, 40.25, 30.25);
-  near(flood(h, owner, target), [0.21, 0.09, 0.4, 0.31], "each edge rounds to the nearest pixel from the owner's rounded corner");
+  near(plannedRect(h, owner, target), [0.21, 0.09, 0.4, 0.31], "each edge rounds to the nearest pixel from the owner's rounded corner");
 
   h = fixture({ ratio: 1.25 }); owner = h.node(); target = h.node(owner);
   // HTML paint bounds use the same CSS grid at fractional display densities.
   target.box = box(20.3, 10, 40, 30);
-  near(flood(h, owner, target), [0.2, 0.1, 0.4, 0.3], "display density does not move the HTML mask into its target");
+  near(plannedRect(h, owner, target), [0.2, 0.1, 0.4, 0.3], "display density does not move the HTML mask into its target");
 
   for (const css of [{ transform: "matrix(1.25,0,0,1.25,0,0)" }, { translate: "0.3px" }, { scale: "0.8" }, { zoom: "1.25" }]) {
     h = fixture({ ratio: 2 }); owner = h.node(); target = h.node(owner);
     Object.assign(owner.css, css);
     owner.box = box(0.3, 0.7, 125, 125); target.box = box(20.5, 10.25, 40.25, 30.25);
-    near(flood(h, owner, target), [20.2 / 125, 9.55 / 125, 40.25 / 125, 30.25 / 125], "transformed branches retain geometric coordinates");
+    near(plannedRect(h, owner, target), [20.2 / 125, 9.55 / 125, 40.25 / 125, 30.25 / 125], "transformed branches retain geometric coordinates");
   }
 
   h = fixture(); const ancestor = h.node(); owner = h.node(ancestor); target = h.node(owner);
   ancestor.css.transform = "matrix(1,0,0,1,0.3,0.3)";
   owner.box = box(0.3, 0.7, 100, 100); target.box = box(20.5, 10.25, 40.25, 30.25);
-  near(flood(h, owner, target), [0.202, 0.0955, 0.4025, 0.3025], "a transform above the filter owner still changes its raster grid");
+  near(plannedRect(h, owner, target), [0.202, 0.0955, 0.4025, 0.3025], "a transform above the filter owner still changes its raster grid");
 
   h = fixture(); owner = h.node(); target = h.node(owner);
   target.box = box(20.2, 10.2, 0.2, 30);
-  h.api.paint(new Map([[owner, 90]]), [target]);
-  assert.equal(h.filters().length, 0, "a target narrower than a pixel that rounds to nothing leaves no mask");
+  assert.equal(h.plan(new Map([[owner, 90]]), [target]).updates.has(owner), false, "a target narrower than a pixel that rounds to nothing leaves no mask");
 
   h = fixture(); owner = h.node(); target = h.node(owner);
   owner.namespaceURI = "http://www.w3.org/2000/svg";
   owner.box = box(0.5, 0.5, 100, 100); target.box = box(20.75, 10.75, 40, 30);
-  near(flood(h, owner, target), [0.2025, 0.1025, 0.4, 0.3], "an SVG owner is drawn as vector geometry and keeps exact coordinates");
+  near(plannedRect(h, owner, target), [0.2025, 0.1025, 0.4, 0.3], "an SVG owner is drawn as vector geometry and keeps exact coordinates");
 
   h = fixture(); owner = h.node(); target = h.node(owner);
   target.namespaceURI = "http://www.w3.org/2000/svg";
   owner.box = box(0.5, 0.5, 100, 100); target.box = box(20.75, 10.75, 40, 30);
-  near(flood(h, owner, target), [0.2025, 0.1025, 0.4, 0.3], "an SVG target does not inherit HTML paint snapping from its owner");
+  near(plannedRect(h, owner, target), [0.2025, 0.1025, 0.4, 0.3], "an SVG target does not inherit HTML paint snapping from its owner");
 });
 
 test("outer SVG viewport clipping works without HTML offset metrics and retains transform safeguards", () => {
@@ -216,9 +230,7 @@ test("outer SVG viewport clipping works without HTML offset metrics and retains 
   h.api.paint(owners, [target]);
   assert.equal(h.api.blocked(), false);
   assert.equal(owner.getAttribute("data-hdm-cutout"), "mask");
-  const flood = h.filters()[0].children.find(node => node.localName === "feFlood");
-  assert.equal(flood.getAttribute("x"), "0.3"); assert.equal(flood.getAttribute("y"), "0.2");
-  assert.equal(flood.getAttribute("width"), "0.2"); assert.equal(flood.getAttribute("height"), "0.3");
+  assert.deepEqual(Array.from(h.plan(new Map([[owner, 90]]), [target]).updates.get(owner).rects[0]), [0.3, 0.2, 0.2, 0.3]);
   viewport.css.transform = "matrix(2,0,0,2,0,0)";
   h.api.paint(owners, [target]);
   assert.equal(h.api.blocked(), false, "positive axis-aligned scaling remains supported");

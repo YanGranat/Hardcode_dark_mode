@@ -19,7 +19,7 @@ const video=document.getElementById('video');video.srcObject=canvas.captureStrea
 document.getElementById('fullscreen').onclick=()=>video.requestFullscreen();
 </script></body></html>`;
 const server = http.createServer((req, res) => { res.setHeader("Content-Type", "text/html; charset=utf-8"); res.end(fixture(req.url === "/")); });
-const harness = createBrowserHarness({ server, viewport: { width: 1000, height: 800 } });
+const harness = createBrowserHarness({ server, viewport: { width: 1000, height: 800 }, timeout: 90000 });
 const state = (page) => page.evaluate(() => ({
   filter: getComputedStyle(document.documentElement).filter,
   scheme: getComputedStyle(document.documentElement).colorScheme,
@@ -29,9 +29,10 @@ const dark = async (page, expected = true) => {
   await page.waitForFunction((wanted) => (getComputedStyle(document.documentElement).filter !== "none") === wanted, expected);
 };
 await harness.run(async () => {
-  await new Promise(resolve => server.listen(0, "0.0.0.0", resolve));
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   port = server.address().port;
   context = await harness.launch();
+  harness.deadline();
   console.log("Chromium", context.browser().version());
   const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker", { timeout: 15000 });
   const id = new URL(worker.url()).host;
@@ -58,6 +59,7 @@ await harness.run(async () => {
   await dark(child, false);
   await dark(page.frames().find((frame) => frame.url() === "about:blank"));
   console.log("PASS immediate/reload frame scope, including related about:blank");
+  harness.deadline();
 
   await add(`http://localhost:${port}/child`);
   await dark(child);
@@ -66,6 +68,7 @@ await harness.run(async () => {
   await remove("http://localhost");
   await dark(child, false);
   console.log("PASS independently enabled child survives parent removal; embedded removal applies immediately");
+  harness.deadline();
 
   await add(page.url());
   await page.evaluate(() => { document.documentElement.className = "site-replaced-root"; });
@@ -83,6 +86,7 @@ await harness.run(async () => {
   });
   await page.waitForFunction(() => getComputedStyle(document.getElementById("shadow").shadowRoot.getElementById("inner").shadowRoot.querySelector("img")).filter !== "none");
   console.log("PASS root replacement, canvas, nested media, late/nested open Shadow DOM");
+  harness.deadline();
 
   await page.bringToFront();
   await page.locator("#fullscreen").click();
@@ -98,12 +102,14 @@ await harness.run(async () => {
   assert.equal(await page.evaluate(() => scrollY), 500);
   assert.equal(await page.locator("#video").evaluate((el) => el.paused), false);
   console.log("PASS fullscreen video filter, playback and scrolling");
+  harness.deadline();
 
   await page.evaluate(() => { document.documentElement.style.background = 'rgb(200, 100, 50)'; document.body.style.background = 'transparent'; });
   await remove("http://127.0.0.1"); await add(page.url());
   assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor), "rgb(200, 100, 50)");
   assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), "rgba(0, 0, 0, 0)");
   console.log("PASS transparent body preserves existing html background");
+  harness.deadline();
 
   await popup.locator('[data-language="ru"]').click();
   await popup.waitForFunction(() => document.documentElement.lang === "ru");
@@ -123,10 +129,12 @@ await harness.run(async () => {
   assert.equal(await popup.locator('[data-language="ru"]').getAttribute("aria-pressed"), "true");
   assert.equal(await popup.locator('#toggle-deepl, #toggle-google, [data-theme]').count(), 0);
   console.log("PASS popup language persistence, rapid changes and removal of retired controls");
+  harness.deadline();
 
   assert.equal(await worker.evaluate(() => (chrome.runtime.getManifest().content_scripts || []).length), 0);
   const universalFilter = "invert(0.9) hue-rotate(180deg)";
   for (const url of ["https://www.deepl.com/translator", "https://translate.google.com/"]) {
+    harness.deadline();
     const origin = new URL(url).origin;
     const pattern = origin + "/**";
     await context.route(pattern, route => route.fulfill({ contentType: "text/html", body: fixture(false) }));
@@ -179,9 +187,11 @@ await harness.run(async () => {
     await context.unroute(pattern);
   }
   console.log("PASS both retired profiles: no automatic theme despite legacy settings; popup Add/exclusions/Pause/Enable/Remove and reload");
+  harness.deadline();
 
   if (process.env.HDM_LIVE === "1") {
     for (const url of ["https://www.deepl.com/translator", "https://translate.google.com/"]) {
+      harness.deadline();
       const live = await context.newPage();
       await live.goto(url, { waitUntil: "domcontentloaded" });
       await live.waitForTimeout(1500);
@@ -197,6 +207,7 @@ await harness.run(async () => {
   }
   await context.close();
   context = await harness.launch();
+  harness.deadline();
   popup = await context.newPage();
   await popup.goto(`chrome-extension://${id}/popup/popup.html`);
   const reopened = await context.newPage();
@@ -208,6 +219,7 @@ await harness.run(async () => {
   await remove("http://127.0.0.1");
   assert.equal((await send({ type: "hdm-universal-get-sites" })).sites.length, 0);
   console.log("PASS browser restart, pause/reload/remove");
+  harness.deadline();
 
   // Normal-tab UI exercise: substitute only which tab the popup considers
   // current. Runtime messages, storage and page application remain real.
@@ -239,6 +251,7 @@ await harness.run(async () => {
   await popup.waitForFunction(() => document.getElementById("library-count").textContent === "0");
   assert.equal(await popup.locator('#current-site-switch').isVisible(), false);
   console.log("PASS popup Add / Pause / Enable / Remove with real worker and page updates");
+  harness.deadline();
 
   await add(reopened.url());
   await add(`http://localhost:${port}/child`);
@@ -293,6 +306,7 @@ await harness.run(async () => {
   await popup.locator("#current-site-action").click();
   await popup.waitForFunction(() => !model.isPending());
   console.log(`PASS immediate toggles/independent removal/focus: four actions in ${inputResponse.elapsed.toFixed(1)}ms; saves before slow renderer reply`);
+  harness.deadline();
 
   const activeWorker = context.serviceWorkers()[0];
   await activeWorker.evaluate(() => {
@@ -326,6 +340,7 @@ await harness.run(async () => {
   await popup.locator("#current-site-action").click();
   await dark(reopened, false);
   console.log("PASS stalled renderer: reopen popup, saved settings/library, remove, late result and subsequent add/remove");
+  harness.deadline();
 
   await popup.waitForFunction(() => !model.isPending());
   await popup.evaluate(() => {

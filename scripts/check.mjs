@@ -32,6 +32,7 @@ function parseJson(file) {
 function walk(directory) {
   const files = [];
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (directory === root && entry.name === "release") continue;
     if ([".git", "backup", "dev_docs", "node_modules", "output", "temporary_files"].includes(entry.name)) {
       continue;
     }

@@ -377,7 +377,6 @@ document.querySelector('.theme-mode').addEventListener('keydown', event => {
   next.focus(); next.click();
 });
 
-// One behaviour for every dropdown of the popup: the sort order and the backup actions.
 function createMenu(trigger, menu, initialItem = () => null) {
   const items = [...menu.querySelectorAll("button")], root = trigger.parentElement;
   function close(restoreFocus = false) {

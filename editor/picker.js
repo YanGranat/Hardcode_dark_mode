@@ -1,47 +1,15 @@
 (function exposePicker(global) {
-  const { allowed, parent, selectionFor, ruleFor, resolveRules, inside } = HdmSelectors;
+  const { resolveRules } = HdmSelectors;
   const ruleKey = HdmRules.identity;
   function open(renderer, { invert, language, origin, initialRule }) {
-    let preview = null,
-      editorDraft = null,
-      closed = false;
+    let closed = false, saving = false;
+    const draft = HdmPickerDraft.create({ invert, initialRule, rules: () => renderer.snapshot().rules });
     function paint() {
-      if (!closed) renderer.preview({ exclusion: preview, draft: editorDraft });
+      if (!closed) renderer.preview(draft.snapshot().preview);
     }
-    let target = null,
-      locked = false,
-      saving = false,
-      matchAll = false;
-    let choosingException = false,
-      exceptionIndex = -1,
-      parentRule = null,
-      parentTarget = null,
-      originalRule = null;
-    let draftExceptions = [],
-      selectedRule = null,
-      listSignature = "",
-      legacySignature = "",
-      legacyRemoved = [],
-      lastGeometryBlocked = false,
-      lastWarning = null;
-    // "adopted": a saved rule picked up only because the selection happened to match
-    // it. Unlike a rule opened from the popup, it must not be overwritten once the
-    // selection moves on; "borrowed" are the exceptions that came with it.
-    let adopted = false,
-      borrowed = new Set(),
-      awaitingRoot = false,
-      dirty = false;
-    const explicitEdit = () => Boolean(originalRule && !adopted);
-    const ownDraft = () => dirty && Boolean(originalRule || draftExceptions.length || legacyRemoved.length);
-    // Changing anything in a draft makes it the user's own work, adopted rule included.
-    const touch = () => {
-      dirty = true;
-      adopted = false;
-      borrowed = new Set();
-    };
     const groupOutlines = [];
     const exceptionOutlines = [];
-    const history = [];
+    let listSignature = "", legacySignature = "", lastGeometryBlocked = false, lastWarning = null;
     const view = HdmPickerView.create({
       invert,
       language,
@@ -85,24 +53,24 @@
     } = view;
     view.mount();
     async function saveRule() {
-      if (!target || saving || choosingException) return;
-      if (renderer.snapshot().legacyCoversRoot) {
+      if (saving) return;
+      draft.reconcile();
+      const state = draft.snapshot(), saved = state.save;
+      if (!state.target || state.choosingException) return;
+      const feedback = renderer.snapshot();
+      if (feedback.legacyCoversRoot) {
         status.textContent = text.legacyConflict;
         return;
       }
-      if (renderer.snapshot().coveringRule) {
-        status.textContent = text.coveringConflict.replace("{block}", () => renderer.snapshot().coveringRule);
+      if (feedback.coveringRule) {
+        status.textContent = text.coveringConflict.replace("{block}", () => feedback.coveringRule);
         return;
       }
-      if (invert && renderer.blocked(parentRoots())) {
+      if (invert && renderer.blocked(state.roots)) {
         status.textContent = text.unsafe;
         return;
       }
-      let rule;
-      try {
-        rule = invert ? { ...parentRule, protections: draftExceptions } : preview;
-        if (!rule || !resolveRules([rule]).length) throw Error("selector_unavailable");
-      } catch {
+      if (!saved.rule || !resolveRules([saved.rule]).length) {
         status.textContent = text.unavailable;
         return;
       }
@@ -111,213 +79,64 @@
       status.textContent = text.saving;
       try {
         await HdmRequests.send(
-          () =>
-            chrome.runtime.sendMessage({
-              type: invert ? "hdm-inversion-save" : "hdm-exclusion-add",
-              origin,
-              rule,
-              ...(invert && originalRule ? { previousRule: originalRule } : {}),
-              ...(invert && legacyRemoved.length ? { removeLegacyProtections: legacyRemoved } : {}),
-            }),
+          () => chrome.runtime.sendMessage({
+            type: invert ? "hdm-inversion-save" : "hdm-exclusion-add",
+            origin,
+            rule: saved.rule,
+            ...(invert && saved.original ? { previousRule: saved.original } : {}),
+            ...(invert && saved.removeLegacyProtections.length ? { removeLegacyProtections: saved.removeLegacyProtections } : {}),
+          }),
           10000,
           "timeout",
         );
-        if (!closed)
-          close({
-            rule,
-            original: invert ? originalRule : null,
-            removeLegacyProtections: invert ? legacyRemoved : [],
-          });
+        if (!closed) close(saved);
       } catch (error) {
         if (!closed) {
           saving = false;
-          draw();
-          status.textContent =
-            error.message === "timeout"
-              ? text.timeout
-              : error.message === "too_many_rules"
-                ? text.limit
-                : ["rule_conflict", "settings_changed"].includes(error.message)
-                  ? text.conflict
-                  : text.failed;
+          refresh();
+          status.textContent = error.message === "timeout" ? text.timeout
+            : error.message === "too_many_rules" ? text.limit
+            : ["rule_conflict", "settings_changed"].includes(error.message) ? text.conflict : text.failed;
         }
       }
     }
-    function currentRule() {
-      return matchAll ? HdmSelectors.groupRuleFor(target) : ruleFor(target);
+    function applyResult(result) {
+      if (result.status) status.textContent = text[result.status];
+      if (result.paint) paint();
+      if (result.paint || result.changed || result.status) refresh();
     }
-    function existingRule(rule) {
-      const saved = renderer.snapshot().rules;
-      const exact = saved.find((existing) => ruleKey(existing) === ruleKey(rule));
-      if (exact || rule.matchAll) return exact || null;
-      const aliases = saved.filter(
-        (existing) => !existing.matchAll && resolveRules([existing])[0] === target,
-      );
-      if (aliases.length > 1) throw Error("rule_conflict");
-      return aliases[0] || null;
-    }
-    function parentRoots() {
-      return parentRule ? resolveRules([parentRule]) : [];
-    }
-    function exceptionMatches(rule) {
-      const roots = parentRoots();
-      return rule
-        ? resolveRules([rule]).filter((element) => !roots.includes(element) && inside(element, roots))
-        : [];
-    }
-    function refreshDraft() {
-      if (!invert) return;
-      const next = draftExceptions.filter((_, index) => !choosingException || index !== exceptionIndex);
-      if (choosingException && locked && selectedRule && exceptionMatches(selectedRule).length)
-        next.push(selectedRule);
-      editorDraft = parentRule
-        ? {
-            original: originalRule,
-            rule: { ...parentRule, protections: next },
-            removeLegacyProtections: legacyRemoved,
-          }
-        : null;
-    }
-    function loadParent(rule, node, existing = null) {
-      const metadata = existing || ((originalRule || dirty) ? parentRule : null);
-      parentRule = { ...rule };
-      if (metadata?.name) parentRule.name = metadata.name;
-      if (metadata?.enabled === false) parentRule.enabled = false;
-      delete parentRule.protections;
-      parentTarget = target = node;
-      selectedRule = parentRule;
-      locked = true;
-      matchAll = rule.matchAll === true;
-      if (existing) {
-        originalRule = HdmRules.normalizeInclusions([existing])[0];
-        draftExceptions = HdmRules.normalizeExclusions(existing.protections);
+    function refresh() {
+      if (closed) return;
+      if (!saving) {
+        const result = draft.reconcile();
+        if (result.status) status.textContent = text[result.status];
+        if (result.paint) queueMicrotask(paint);
       }
-      refreshDraft();
+      draw(draft.snapshot());
     }
     function beginException(index = -1) {
-      if (saving || !parentRule) return;
-      awaitingRoot = false;
-      choosingException = true;
-      exceptionIndex = index;
-      selectedRule = index >= 0 ? draftExceptions[index] : null;
-      target = selectedRule ? exceptionMatches(selectedRule)[0] || null : null;
-      locked = Boolean(target);
-      matchAll = selectedRule?.matchAll === true;
-      history.length = 0;
-      refreshDraft();
-      paint();
-      status.textContent = locked ? text.exceptionChosen : text.exceptionHint;
-      draw();
+      if (saving || !draft.snapshot().parentRule) return;
+      applyResult(draft.beginException(index));
       panel.focus({ preventScroll: true });
     }
     function finishException(apply) {
       if (saving) return;
-      if (apply) {
-        if (
-          !selectedRule ||
-          !exceptionMatches(selectedRule).length ||
-          renderer.blocked(parentRoots()) ||
-          renderer.snapshot().legacyCoversRoot ||
-          renderer.snapshot().coveringRule
-        )
-          return;
-        const next = [...draftExceptions];
-        if (exceptionIndex >= 0) next[exceptionIndex] = selectedRule;
-        else if (!next.some((rule) => ruleKey(rule) === ruleKey(selectedRule))) next.push(selectedRule);
-        if (next.length > HdmRules.MAX_RULES) {
-          status.textContent = text.limit;
-          return;
-        }
-        draftExceptions = HdmRules.normalizeExclusions(next);
-        touch();
-      }
-      choosingException = false;
-      exceptionIndex = -1;
-      target = parentRoots()[0] || parentTarget;
-      selectedRule = parentRule;
-      matchAll = parentRule?.matchAll === true;
-      locked = Boolean(target?.isConnected);
-      history.length = 0;
-      refreshDraft();
-      paint();
-      status.textContent = text.chosen;
-      draw();
-      addException.focus({ preventScroll: true });
-    }
-    function updatePreview() {
-      if (!locked) return;
-      let existing = null;
-      try {
-        selectedRule = currentRule();
-        if (choosingException && exceptionIndex >= 0) {
-          const metadata = draftExceptions[exceptionIndex];
-          if (metadata?.name) selectedRule.name = metadata.name;
-          if (metadata?.enabled === false) selectedRule.enabled = false;
-        }
-        if (!choosingException) existing = existingRule(selectedRule);
-      } catch (error) {
-        selectedRule = null;
-        status.textContent = error.message === "rule_conflict" ? text.conflict : text.unavailable;
-      }
-      if (invert) {
-        if (!choosingException && selectedRule) {
-          if (adopted && ruleKey(selectedRule) !== ruleKey(originalRule)) {
-            originalRule = null;
-            adopted = false;
-            draftExceptions = draftExceptions.filter((rule) => !borrowed.has(ruleKey(rule)));
-            borrowed = new Set();
-          }
-          const adoptedRule = !originalRule && !draftExceptions.length ? existing : null;
-          loadParent(selectedRule, target, adoptedRule);
-          if (adoptedRule) {
-            adopted = true;
-            borrowed = new Set(draftExceptions.map(ruleKey));
-          }
-        }
-        refreshDraft();
-      } else preview = existing || selectedRule;
-      if (selectedRule) status.textContent = choosingException ? text.exceptionChosen : text.chosen;
-      paint();
+      const state = draft.snapshot(), feedback = renderer.snapshot();
+      if (apply && (renderer.blocked(state.roots) || feedback.legacyCoversRoot || feedback.coveringRule)) return;
+      const result = draft.finishException(apply);
+      applyResult(result);
+      if (result.accepted) addException.focus({ preventScroll: true });
     }
     function chooseScope(all) {
-      if (!locked || saving) return;
-      matchAll = all;
-      updatePreview();
-      draw();
+      if (!saving) applyResult(draft.scope(all));
     }
-    function draw() {
+    function draw(state = draft.snapshot()) {
       if (closed) return;
-      if (invert && !choosingException && parentRule && !saving) {
-        awaitingRoot = false;
-        if (!locked || !target?.isConnected) {
-          const restored = resolveRules([parentRule])[0];
-          // While a saved rule or a changed draft waits for its block to return,
-          // pointer selection stays off: it would retarget it to an unrelated element.
-          const keep = explicitEdit() || ownDraft();
-          if (restored || keep || !target?.isConnected) {
-            target = parentTarget = restored || null;
-            selectedRule = parentRule;
-            matchAll = parentRule.matchAll === true;
-            locked = Boolean(restored);
-            history.length = 0;
-          }
-          awaitingRoot = !restored && keep;
-        }
-      }
-      if (target && !target.isConnected && !saving) {
-        target = selectedRule
-          ? (choosingException ? exceptionMatches(selectedRule) : resolveRules([selectedRule]))[0] || null
-          : null;
-        history.length = 0;
-        if (!target) {
-          locked = false;
-          selectedRule = null;
-          preview = null;
-          status.textContent = choosingException ? text.exceptionHint : text.hint;
-          refreshDraft();
-          queueMicrotask(paint);
-        }
-      }
+      const {
+        target, locked, matchAll, choosingException, exceptionIndex, parentRule,
+        exceptions: draftExceptions, roots, groupRule, groupMatches: matches,
+        selectedMatches: previewMatches, historyLength, canGrow,
+      } = state;
       if (target?.isConnected) {
         const rect = target.getBoundingClientRect();
         outline.hidden = false;
@@ -329,19 +148,6 @@
           height: `${rect.height}px`,
         });
       } else outline.hidden = true;
-      let groupRule = locked && matchAll ? selectedRule : null;
-      if (target && !groupRule)
-        try {
-          groupRule = HdmSelectors.groupRuleFor(target);
-        } catch {
-          /* Exact selection remains available. */
-        }
-      const matches =
-        matchAll && groupRule
-          ? choosingException
-            ? exceptionMatches(groupRule)
-            : HdmSelectors.resolveRules([groupRule])
-          : [];
       while (groupOutlines.length > matches.length) groupOutlines.pop().remove();
       for (const [index, element] of matches.entries()) {
         const box = groupOutlines[index] || document.createElement("div");
@@ -371,23 +177,17 @@
       one.setAttribute("aria-pressed", String(!matchAll));
       similar.setAttribute("aria-pressed", String(matchAll));
       matchCount.hidden = !locked;
-      const previewMatches =
-        locked && selectedRule
-          ? choosingException
-            ? exceptionMatches(selectedRule)
-            : resolveRules([selectedRule])
-          : [];
       const countText = text.matches + previewMatches.length;
       if (matchCount.textContent !== countText) matchCount.textContent = countText;
       if (invert && parentRule && !saving) {
         const coveringMessage = renderer.snapshot().coveringRule
           ? text.coveringConflict.replace("{block}", () => renderer.snapshot().coveringRule)
           : null;
-        const warning = !parentRoots().length
+        const warning = !roots.length
           ? text.rootMissing
           : renderer.snapshot().legacyCoversRoot
             ? text.legacyConflict
-            : coveringMessage || (renderer.blocked(parentRoots()) ? text.unsafe : null);
+            : coveringMessage || (renderer.blocked(roots) ? text.unsafe : null);
         if (warning && status.textContent !== warning) status.textContent = warning;
         else if (!warning && lastWarning && status.textContent === lastWarning) {
           status.textContent = choosingException
@@ -410,7 +210,7 @@
         saving ||
         renderer.snapshot().legacyCoversRoot ||
         Boolean(renderer.snapshot().coveringRule) ||
-        !parentRoots().length ||
+        !roots.length ||
         draftExceptions.length >= HdmRules.MAX_RULES;
       back.hidden = applyException.hidden = !choosingException;
       back.disabled = saving;
@@ -422,7 +222,7 @@
         saving ||
         renderer.snapshot().legacyCoversRoot ||
         Boolean(renderer.snapshot().coveringRule) ||
-        Boolean(renderer.blocked(parentRoots()));
+        Boolean(renderer.blocked(roots));
       save.hidden = choosingException;
       save.disabled =
         !locked ||
@@ -430,19 +230,15 @@
         saving ||
         renderer.snapshot().legacyCoversRoot ||
         Boolean(renderer.snapshot().coveringRule) ||
-        Boolean(invert && renderer.blocked(parentRoots()));
-      larger.disabled =
-        !target ||
-        !allowed(parent(target)) ||
-        (choosingException && !inside(parent(target), parentRoots())) ||
-        saving;
-      smaller.disabled = !history.length || saving;
+        Boolean(invert && renderer.blocked(roots));
+      larger.disabled = !canGrow || saving;
+      smaller.disabled = !historyLength || saving;
       cancel.disabled = saving;
-      lastGeometryBlocked = Boolean(invert && parentRule && renderer.blocked(parentRoots()));
-      drawExceptions();
-      drawLegacy();
+      lastGeometryBlocked = Boolean(invert && parentRule && renderer.blocked(roots));
+      drawExceptions(state);
+      drawLegacy(state);
     }
-    function drawLegacy() {
+    function drawLegacy({ parentRule, choosingException, legacyRemoved }) {
       legacySection.hidden =
         !invert || !parentRule || choosingException || !renderer.snapshot().protections.length;
       if (renderer.snapshot().legacyCoversRoot && !legacySection.open) legacySection.open = true;
@@ -464,11 +260,7 @@
           "removeLegacy",
           () => {
             if (saving) return;
-            legacyRemoved = legacyRemoved.filter((existing) => ruleKey(existing) !== ruleKey(rule));
-            legacyRemoved.push(rule);
-            touch();
-            refreshDraft();
-            paint();
+            applyResult(draft.removeLegacy(rule));
           },
           row,
           "M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5",
@@ -501,10 +293,10 @@
         list.scrollTop = top;
       };
     }
-    function drawExceptions() {
+    function drawExceptions(state) {
       if (!invert) return;
-      const parents = parentRoots();
-      const activeExceptions = draftExceptions.flatMap((rule) => exceptionMatches(rule));
+      const { roots: parents, exceptions: draftExceptions, choosingException, exceptionMatches } = state;
+      const activeExceptions = exceptionMatches.flat();
       const rectangles = [...new Set([...(choosingException ? parents : []), ...activeExceptions])];
       while (exceptionOutlines.length > rectangles.length) exceptionOutlines.pop().remove();
       for (const [index, element] of rectangles.entries()) {
@@ -524,7 +316,7 @@
           height: `${rect.height}px`,
         });
       }
-      const counts = draftExceptions.map((rule) => exceptionMatches(rule).length);
+      const counts = exceptionMatches.map(matches => matches.length);
       const signature = JSON.stringify([draftExceptions, counts, saving]);
       if (signature === listSignature) return;
       listSignature = signature;
@@ -544,10 +336,7 @@
           "removeException",
           () => {
             if (saving) return;
-            draftExceptions.splice(index, 1);
-            touch();
-            refreshDraft();
-            paint();
+            applyResult(draft.removeException(index));
           },
           row,
           "M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5",
@@ -562,85 +351,30 @@
       restoreFocus();
     }
     function resize(up) {
-      if (saving) return;
-      if (
-        up &&
-        target &&
-        allowed(parent(target)) &&
-        (!choosingException || inside(parent(target), parentRoots()))
-      ) {
-        history.push(target);
-        target = parent(target);
-      } else if (!up && history.length) target = history.pop();
-      if (locked) updatePreview();
-      draw();
-    }
-    function pickSelection(element) {
-      if (!element) return { target: null, history: [] };
-      const selection = selectionFor(element);
-      if (!choosingException || inside(selection.target, parentRoots())) return selection;
-      return inside(element, parentRoots())
-        ? { target: element, history: [] }
-        : { target: null, history: [] };
+      if (!saving) applyResult(draft.resize(up));
     }
     function move(event) {
-      if (locked || awaitingRoot || own(event)) return;
-      const element = hit(event);
-      if (element !== target) {
-        const selection = pickSelection(element);
-        if (choosingException && !selection.target && status.textContent !== text.insideOnly)
-          status.textContent = text.insideOnly;
-        if (
-          selection.target === target &&
-          selection.history.length === history.length &&
-          selection.history.every((node, index) => node === history[index])
-        )
-          return;
-        target = selection.target;
-        history.splice(0, history.length, ...selection.history);
-        if (choosingException && !target && status.textContent !== text.insideOnly)
-          status.textContent = text.insideOnly;
-        draw();
-      }
+      if (own(event)) return;
+      const state = draft.selection();
+      if (state.locked || state.awaitingRoot) return;
+      applyResult(draft.hover(hit(event)));
     }
     function click(event) {
       if (own(event)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (saving || awaitingRoot) return;
-      if (locked) {
-        // A second click corrects a misplaced first one. It is ignored where it would
-        // silently move a saved rule or collected exceptions to another element.
-        if (!choosingException && invert && (explicitEdit() || ownDraft())) return;
-        const selection = pickSelection(hit(event));
-        if (!selection.target || selection.target === target) return;
-        target = selection.target;
-        history.splice(0, history.length, ...selection.history);
-        matchAll = false;
-      } else if (!target?.isConnected) return;
-      locked = true;
-      updatePreview();
-      draw();
+      if (!saving) applyResult(draft.select(hit(event)));
     }
     function block(event) {
-      if (!own(event)) {
-        if (!target && !locked && !awaitingRoot) {
-          const element = hit(event);
-          if (element) {
-            const selection = pickSelection(element);
-            target = selection.target;
-            history.splice(0, history.length, ...selection.history);
-          }
-          draw();
-        }
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
+      if (own(event)) return;
+      const state = draft.selection();
+      if (!state.target && !state.locked && !state.awaitingRoot) applyResult(draft.pointer(hit(event)));
+      event.preventDefault();
+      event.stopImmediatePropagation();
     }
     function close(saved) {
       if (closed) return;
       closed = true;
-      preview = editorDraft = null;
       input.disconnect();
       host.remove();
       renderer.endEdit(saved?.rule ? saved : undefined);
@@ -655,34 +389,28 @@
       onPointer: block,
       onResize: resize,
       onEscape() {
-        if (!saving) choosingException ? finishException(false) : close();
+        if (!saving) draft.selection().choosingException ? finishException(false) : close();
       },
       onClose: close,
-      refresh: draw,
+      refresh,
     });
     const { own, hit } = input;
     const editor = {
       close,
-      refresh: draw,
+      refresh,
       focus() {
         panel.focus({ preventScroll: true });
       },
       geometry() {
-        const blocked = Boolean(invert && parentRule && renderer.blocked(parentRoots()));
-        if (blocked !== lastGeometryBlocked) draw();
+        const blocked = Boolean(invert && renderer.blocked(draft.roots()));
+        if (blocked !== lastGeometryBlocked) refresh();
       },
     };
     if (invert && initialRule) {
-      const node = resolveRules([initialRule])[0];
-      if (!node) {
-        close();
-        throw Error("selector_unavailable");
-      }
-      loadParent(initialRule, node, initialRule);
       status.textContent = text.chosen;
       paint();
     }
-    draw();
+    refresh();
 
     return editor;
   }

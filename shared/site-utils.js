@@ -6,7 +6,6 @@
       (url.hostname === "chrome.google.com" && url.pathname.startsWith("/webstore"));
   }
 
-  // The origin itself is the identifier: a hash could give two sites the same one.
   const scriptId = origin => SCRIPT_PREFIX + origin;
 
   function fromUrl(value) {
@@ -19,8 +18,7 @@
       const hostname = url.hostname.toLowerCase();
       // "*" parses as a host name but would be a match pattern for every site.
       if (!hostname || hostname.includes("*")) return { supported: false, reason: "invalid" };
-      // Chrome match patterns cannot isolate ports. Treat every port on a host
-      // as one library entry so stored state matches actual script scope.
+      // Chrome match patterns scope a host across ports.
       const origin = `${url.protocol}//${hostname}`;
       return {
         supported: true,

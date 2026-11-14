@@ -20,7 +20,7 @@ for (const ratio of [1, 1.25, 1.5, 2]) {
     const command = await cdp.send("Browser.getBrowserCommandLine");
     assert(command.arguments.some((value) => value.startsWith("--headless")));
     await cdp.detach();
-    const source = ["shared/rules.js", "content/selectors.js", "content/cutouts.js"]
+    const source = ["shared/rules.js", "content/selectors.js", "content/cutout-geometry.js", "content/cutouts.js"]
       .map((file) => fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8"))
       .join("\n");
     const sample = async (points) => {

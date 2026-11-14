@@ -31,6 +31,7 @@ let context;
 const harness = createBrowserHarness({ server, timeout: 30000, name: "Graphics" });
 const { deadline } = harness;
 await harness.run(async () => {
+  if (process.env.HDM_SCREENSHOT_DIR) fs.mkdirSync(process.env.HDM_SCREENSHOT_DIR, { recursive: true });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   context = await harness.launch();
   deadline();
@@ -173,7 +174,6 @@ await harness.run(async () => {
   samePixels(await capture('#slide'), original, 'Removing the site must restore original SVG pixels');
   console.log('PASS precise legacy rules, pause/resume/remove and original pixel restoration while off');
   if (process.env.HDM_SCREENSHOT_DIR) {
-    fs.mkdirSync(process.env.HDM_SCREENSHOT_DIR, { recursive: true });
     await page.screenshot({ path: path.join(process.env.HDM_SCREENSHOT_DIR, 'graphics-original.png') });
   }
 });

@@ -40,7 +40,7 @@ function registrationsFor(site) {
   const boot = site.mode === "selected" ? [] : HdmRuntime.boot;
   return [
     { ...common, id: site.scriptId, css: UNIVERSAL_CSS_FILES, js: [...boot, ...UNIVERSAL_JS_FILES] },
-    // "#" cannot occur in a host name, so this never equals another site's identifier.
+    // "#" separates the shadow registration from host identifiers.
     { ...common, id: site.scriptId + "#shadow", js: HdmRuntime.shadow, world: "MAIN" }
   ];
 }
@@ -223,7 +223,6 @@ async function handleMessage(message) {
     return commitSites(previous, next, new Set([site.origin]));
   }
   if (message.type === "hdm-universal-restore-site") {
-    // Puts back a just-removed entry with its mode, rules and date intact.
     const site = HdmSites.normalizeStoredSite(message.site);
     if (!site) throw new Error("invalid_message");
     if (next.some((entry) => entry.origin === site.origin)) throw new Error("site_exists");
@@ -232,7 +231,6 @@ async function handleMessage(message) {
   }
   if (message.type === "hdm-library-import") {
     if (!Array.isArray(message.sites) || message.sites.length > MAX_IMPORTED_SITES) throw new Error("invalid_message");
-    // Imported entries replace entries for the same site; other sites are kept.
     const imported = HdmSites.normalizeLibrary(message.sites);
     if (!imported.length) throw new Error("nothing_to_import");
     const incoming = new Map(imported.map((site) => [site.origin, site]));

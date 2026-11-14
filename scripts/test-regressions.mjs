@@ -34,15 +34,16 @@ const server = http.createServer((req, res) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8"); res.setHeader("Cache-Control", "no-store");
   res.end((pages[req.url] || pages["/plain"])());
 });
-const harness = createBrowserHarness({ server, viewport: { width: 1000, height: 900 }, name: "Regression" });
+const harness = createBrowserHarness({ server, viewport: { width: 1000, height: 900 }, timeout: 90000, name: "Regression" });
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const near = (actual, expected, tolerance, label) => actual.forEach((value, index) =>
   assert(Math.abs(value - expected[index]) <= tolerance, `${label}: ${actual} is not within ${tolerance} of ${expected}`));
 
 await harness.run(async () => {
-  await new Promise(resolve => server.listen(0, "0.0.0.0", resolve));
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const port = server.address().port, origin = "http://127.0.0.1", base = `http://127.0.0.1:${port}`;
   const context = await harness.launch();
+  harness.deadline();
   console.log("Chromium", context.browser().version());
   const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker", { timeout: 15000 });
   const id = new URL(worker.url()).host;
@@ -89,6 +90,7 @@ await harness.run(async () => {
 
   // 1. A visible notice keeps its own text when the popup re-renders.
   {
+    harness.deadline();
     const failed = await popup.evaluate(() => { showToast(translate("operationFailed")); return translate("operationFailed"); });
     await popup.evaluate(() => chrome.storage.sync.set({ librarySort: "newest" }));
     await popup.waitForFunction(() => document.getElementById("library-sort").value === "newest");
@@ -114,6 +116,7 @@ await harness.run(async () => {
 
   // 2. Top-layer content and printing in whole-page mode.
   {
+    harness.deadline();
     const page = await fresh("/dialog");
     const [background, plainImage] = await colors(page, [[900, 800], [60, 540]]);
     await page.evaluate(() => { document.getElementById("d").showModal(); document.getElementById("pop").showPopover(); });
@@ -133,6 +136,7 @@ await harness.run(async () => {
 
   // 3. Top-layer content inside an inverted block, and printing, in selected-block mode.
   {
+    harness.deadline();
     const page = await fresh("/dialog-block", "selected");
     await ok({ type: "hdm-inversion-save", origin, rule: { path: ["#area"], label: "div#area", protections: [{ path: ["#keep"], label: "div#keep" }] } });
     await page.waitForFunction(() => document.getElementById("area").getAttribute("data-hdm-cutout") === "mask");
@@ -158,6 +162,7 @@ await harness.run(async () => {
 
   // 4. Looking at "Similar elements" must not overwrite the saved group.
   {
+    harness.deadline();
     const page = await fresh("/cards", "selected");
     await ok({ type: "hdm-inversion-save", origin, rule: { path: ["div.card"], matchAll: true, label: "div.card",
       protections: [{ path: ["span.tag"], matchAll: true, label: "span.tag" }] } });
@@ -179,6 +184,7 @@ await harness.run(async () => {
 
   // 5. A saved block that leaves the page and returns is rebound, whatever the pointer does.
   {
+    harness.deadline();
     const page = await fresh("/blocks", "selected");
     await ok({ type: "hdm-inversion-save", origin, rule: { path: ["#block"], label: "div#block" } });
     await page.waitForFunction(() => document.getElementById("block").getAttribute("data-hdm-inverted") === "root");
@@ -221,6 +227,7 @@ await harness.run(async () => {
 
   // 6. A second click corrects the first; collected exceptions pin the block.
   {
+    harness.deadline();
     const page = await fresh("/blocks");
     await pick(base + "/blocks", "page");
     await clickAt(page, "#banner");
@@ -254,6 +261,7 @@ await harness.run(async () => {
 
   // 7. The saved rule stays applied on every frame across Save.
   for (const [mode, selector, attribute] of [["selected", "#block", "data-hdm-inverted"], ["page", "#banner", "data-hdm-excluded"]]) {
+    harness.deadline();
     const page = await fresh("/blocks", mode);
     for (let round = 0; round < 8; round++) {
       await pick(base + "/blocks", mode);
@@ -280,6 +288,7 @@ await harness.run(async () => {
 
   // 8. Same-tag siblings at the top of an open shadow root are selectable.
   {
+    harness.deadline();
     const page = await fresh("/shadow");
     await pick(base + "/shadow", "page");
     const host = await page.locator("#host").boundingBox();
@@ -299,6 +308,7 @@ await harness.run(async () => {
 
   // 9. A layering conflict suspends its own block only.
   {
+    harness.deadline();
     const page = await fresh("/conflict", "selected");
     await ok({ type: "hdm-inversion-save", origin, rule: { path: ["#a"], label: "div#a" } });
     await ok({ type: "hdm-inversion-save", origin, rule: { path: ["#b"], label: "div#b", protections: [{ path: ["#bex"], label: "div#bex" }] } });
@@ -317,6 +327,7 @@ await harness.run(async () => {
 
   // 10. Tabs that cannot answer do not delay a change or ask for a reload.
   {
+    harness.deadline();
     const page = await fresh("/plain");
     const errorTab = await context.newPage();
     await errorTab.goto("http://127.0.0.1:1/").catch(() => {});
@@ -341,6 +352,7 @@ await harness.run(async () => {
 
   // 11. A saved block absent from this page is reported as such.
   {
+    harness.deadline();
     const page = await fresh("/blocks", "selected");
     await ok({ type: "hdm-inversion-save", origin, rule: { path: ["#block"], label: "div#block" } });
     const rule = (await stored()).inclusions[0];
@@ -354,6 +366,7 @@ await harness.run(async () => {
 
   // 12. Whole-page sites are dark from their first frame; selected-block sites never get the page filter.
   {
+    harness.deadline();
     const page = await context.newPage();
     await page.addInitScript(() => {
       const record = window.__load = [];
@@ -427,6 +440,7 @@ await harness.run(async () => {
 
   // 13. Removing a site can be undone with everything it had.
   {
+    harness.deadline();
     const page = await fresh("/blocks", "selected");
     await ok({ type: "hdm-inversion-save", origin, rule: { path: ["#block"], label: "div#block", protections: [{ path: ["#chip"], label: "span#chip" }] } });
     await ok({ type: "hdm-exclusion-add", origin, rule: { path: ["#banner"], label: "div#banner" } });
@@ -448,6 +462,7 @@ await harness.run(async () => {
 
   // 14. Settings survive an export and import through the options page.
   {
+    harness.deadline();
     const page = await fresh("/blocks", "selected");
     await ok({ type: "hdm-inversion-save", origin, rule: { path: ["#block"], label: "div#block", protections: [{ path: ["#chip"], label: "span#chip" }] } });
     const before = await stored();
@@ -484,6 +499,7 @@ await harness.run(async () => {
 
   // 15. The same two actions in the popup, in a menu beside the sort order.
   {
+    harness.deadline();
     const page = await fresh("/blocks", "selected");
     await ok({ type: "hdm-inversion-save", origin, rule: { path: ["#block"], label: "div#block", protections: [{ path: ["#chip"], label: "span#chip" }] } });
     const before = await stored();

@@ -18,10 +18,10 @@ After source changes, reload the extension and refresh already open themed tabs.
 
 Open a site, open the popup, and click **Add site**. Sites outside the library stay unchanged.
 
-- **Whole page** inverts the page. **Exclude element** restores a selected area to approximately its original colors.
+- **Whole page** inverts the page. **Exclude element** adds exceptions to the page theme.
 - **Selected blocks** leaves the page unchanged until you **Configure block**. Add exceptions inside the block to preserve their original rendered colors without reversing the inversion.
 
-Click an element to preview it. **Larger** and **Smaller** adjust the selection. Choose **Similar elements** to include matching current and future elements; check the outlines and match count before saving. Rules follow page structure, not a particular slide or document.
+Click an element to preview it. **Larger** and **Smaller** adjust the selection. Choose **Similar elements** to include matching current and future elements; check the outlines and match count before saving.
 
 **Save** commits the block and its exceptions together. **Back** or Escape during exception selection discards that exception; closing the editor discards the entire draft. Click a saved block in the popup to edit it again.
 
@@ -31,14 +31,7 @@ Pause a site from **Current site** or the library. Switching modes retains both 
 
 The popup provides library sorting and settings export/import. Export before moving an unpacked extension: Chrome gives a moved folder new storage. Import is also available on the extension's **Options** page.
 
-## Limits and privacy
-
-- Already-dark pages can become light. Filtered image colors and whole-page exclusions are approximate.
-- Original-color exceptions in selected-block mode protect rectangular areas, not arbitrary shapes or separate visual layers. Unsupported transforms or overlapping filters suspend that block's inversion.
-- A canvas is one selectable element. Closed Shadow DOM cannot be inspected. Embedded frames are selected as a whole; their site needs its own library entry to theme the contents.
-- Page structure changes can break saved selectors. Ambiguous matches are not guessed; select the area again.
-- A transparent block does not include its ancestor's background. Select an available block with its own background, or use Whole page with exceptions.
-- Chrome internal pages and the Chrome Web Store cannot be themed. Printing and document exports retain the site's colors.
+## Privacy
 
 HTTP/HTTPS access is requested once. Theme scripts are registered only for enabled library sites with granted access. Withholding access in Chrome suspends the theme without deleting its settings.
 
