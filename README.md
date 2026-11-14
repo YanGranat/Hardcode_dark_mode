@@ -37,11 +37,14 @@ The popup provides library sorting and settings export/import. Export before mov
 - Original-color exceptions in selected-block mode protect rectangular areas, not arbitrary shapes or separate visual layers. Unsupported transforms or overlapping filters suspend that block's inversion.
 - A canvas is one selectable element. Closed Shadow DOM cannot be inspected. Embedded frames are selected as a whole; their site needs its own library entry to theme the contents.
 - Page structure changes can break saved selectors. Ambiguous matches are not guessed; select the area again.
+- A transparent block does not include its ancestor's background. Select an available block with its own background, or use Whole page with exceptions.
 - Chrome internal pages and the Chrome Web Store cannot be themed. Printing and document exports retain the site's colors.
 
 HTTP/HTTPS access is requested once. Theme scripts are registered only for enabled library sites with granted access. Withholding access in Chrome suspends the theme without deleting its settings.
 
 Site rules stay in local storage; language and sorting use Chrome sync storage. There is no analytics, remote code, external asset loading, or extension-initiated network traffic.
+
+See the [privacy policy](PRIVACY.md) for details.
 
 ## Development
 

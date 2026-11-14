@@ -31,6 +31,9 @@ backup/
 backup*/
 *.bak
 
+# Release artifacts
+release/
+
 # Local agent files
 .claude/
 .codex/
