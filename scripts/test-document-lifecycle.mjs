@@ -133,7 +133,9 @@ await harness.run(async () => {
   while (true) {
     try { await popup.goto(`${extension}/popup/popup.html`); break; }
     catch (error) {
-      if (Date.now() >= retryUntil || !error.message.includes("ERR_BLOCKED_BY_CLIENT")) throw error;
+      const unavailable = error.message.includes("ERR_BLOCKED_BY_CLIENT") ||
+        error.message.includes('is interrupted by another navigation to "chrome-error://chromewebdata/"');
+      if (Date.now() >= retryUntil || !unavailable) throw error;
       await new Promise(resolve => setTimeout(resolve, 50));
     }
   }
