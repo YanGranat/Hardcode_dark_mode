@@ -1,0 +1,5 @@
+{
+  "extensionName": { "message": "Custom Dark Mode" },
+  "extensionDescription": { "message": "Створіть власну темну тему: інвертуйте всю сторінку або виберіть окремі блоки." },
+  "extensionActionTitle": { "message": "Custom Dark Mode" }
+}

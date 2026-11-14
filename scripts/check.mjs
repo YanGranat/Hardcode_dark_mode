@@ -103,15 +103,16 @@ for (const file of cssFiles) {
 }
 
 const englishLocale = parseJson("_locales/en/messages.json");
-const russianLocale = parseJson("_locales/ru/messages.json");
-if (englishLocale && russianLocale) {
-  const englishKeys = Object.keys(englishLocale).sort();
-  const russianKeys = Object.keys(russianLocale).sort();
-  if (JSON.stringify(englishKeys) !== JSON.stringify(russianKeys)) {
-    fail("_locales: English and Russian message keys differ");
-  }
-  for (const [, key] of JSON.stringify(manifest || {}).matchAll(/__MSG_(\w+)__/g)) {
-    if (!englishLocale[key]?.message || !russianLocale[key]?.message) fail(`_locales: manifest message ${key} is missing`);
+if (englishLocale) {
+  for (const locale of fs.readdirSync(path.join(root, "_locales"))) {
+    const messages = parseJson(`_locales/${locale}/messages.json`);
+    if (!messages) continue;
+    if (JSON.stringify(Object.keys(englishLocale).sort()) !== JSON.stringify(Object.keys(messages).sort())) {
+      fail(`_locales/${locale}: message keys differ from English`);
+    }
+    for (const [, key] of JSON.stringify(manifest || {}).matchAll(/__MSG_(\w+)__/g)) {
+      if (!messages[key]?.message) fail(`_locales/${locale}: manifest message ${key} is missing`);
+    }
   }
 }
 if (manifest && !fs.existsSync(path.join(root, "_locales", String(manifest.default_locale), "messages.json"))) {

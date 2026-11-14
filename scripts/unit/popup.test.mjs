@@ -193,13 +193,26 @@ test("library sorting keeps independent date, tie and unknown-date contracts", (
   assert.equal(sites[0].origin, "https://z.test"); assert.deepEqual(Array.from(sorting.sortSites([], "newest")), []);
 });
 
-test("translations cover both languages, HTML references and interpolation", () => {
+test("translations cover every language, HTML references and interpolation", () => {
   const { text } = popupFixture();
   const keys = Object.keys(text.messages.en).sort();
-  assert.deepEqual(keys, Object.keys(text.messages.ru).sort());
-  for (const match of read("popup/popup.html").matchAll(/data-i18n(?:-aria-label)?="([^"]+)"/g)) {
-    assert.notEqual(text.translate("en", match[1]), match[1]); assert.notEqual(text.translate("ru", match[1]), match[1]);
+  for (const language of ["en", "ru", "uk", "de", "es"]) {
+    assert.deepEqual(keys, Object.keys(text.messages[language]).sort());
+    for (const match of read("popup/popup.html").matchAll(/data-i18n(?:-aria-label|-title)?="([^"]+)"/g)) {
+      assert.notEqual(text.translate(language, match[1]), match[1]);
+    }
   }
   assert.equal(text.translate("en", "enableSite", { site: "example.test" }), "Enable dark theme for example.test");
   assert.equal(text.normalizeLanguage("unsupported"), "en");
+});
+
+test("popup detects regional browser languages but keeps the stored choice", async () => {
+  for (const [browserLanguage, expected] of [["uk-UA", "uk"], ["de-CH", "de"], ["es-MX", "es"], ["fr-FR", "en"]]) {
+    const detected = popupFixture({ browserLanguage, settings: {} });
+    await detected.init();
+    assert.equal(detected.model.snapshot().settings.language, expected);
+    const saved = popupFixture({ browserLanguage, settings: { language: "ru" } });
+    await saved.init();
+    assert.equal(saved.model.snapshot().settings.language, "ru");
+  }
 });

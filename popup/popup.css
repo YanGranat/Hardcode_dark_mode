@@ -9,6 +9,9 @@
   --accent-2: #7aa2ff;
   --shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
   --radius: 16px;
+  --sort-width: 140px;
+  --sort-radius: 8px;
+  --sort-inset: 4px;
 }
 
 * {
@@ -110,39 +113,18 @@ body {
   color: var(--muted);
 }
 
-.language-switch {
-  display: grid;
-  grid-template-columns: repeat(2, 32px);
-  gap: 2px;
+.language-picker {
+  position: relative;
   flex: 0 0 auto;
-  padding: 2px;
-  border-radius: 999px;
-  background: rgba(27, 35, 51, 0.85);
+}
+
+#language-select {
+  width: 60px;
+  height: 30px;
+  padding: 0 10px;
   border: 1px solid var(--border);
-}
-
-.language-btn {
-  min-width: 32px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font: 600 10px/1 "Segoe UI", system-ui, sans-serif;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.language-btn.active {
-  background: linear-gradient(135deg, rgba(93, 217, 193, 0.95), rgba(122, 162, 255, 0.9));
-  color: #0c1017;
-}
-
-.language-btn:focus-visible {
-  outline: 2px solid rgba(122, 162, 255, 0.7);
-  outline-offset: 2px;
+  border-radius: var(--sort-radius);
+  background: var(--panel-2);
 }
 
 .card {
@@ -236,9 +218,6 @@ body {
 
 .library-caption { display: flex; align-items: center; gap: 6px; }
 .library-tools {
-  --sort-width: 140px;
-  --sort-radius: 8px;
-  --sort-inset: 4px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -267,6 +246,7 @@ body {
 #library-backup svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 #library-backup-menu { width: max-content; min-width: var(--sort-width); max-width: calc(100% - 16px); }
 #library-backup-menu button { grid-template-columns: minmax(0, 1fr); }
+#language-select,
 #library-sort,
 .menu button {
   display: grid;
@@ -287,10 +267,11 @@ body {
   border-radius: var(--sort-radius);
   background: var(--panel-2);
 }
+#language-select:hover, #language-select[aria-expanded="true"],
 #library-sort:hover, #library-sort[aria-expanded="true"] { color: var(--text); border-color: #445673; }
-#library-sort:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
-#library-sort > svg { width: 14px; height: 14px; flex: 0 0 auto; }
-#library-sort[aria-expanded="true"] > svg { transform: rotate(180deg); }
+#language-select:focus-visible, #library-sort:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+#language-select > svg, #library-sort > svg { width: 14px; height: 14px; flex: 0 0 auto; }
+#language-select[aria-expanded="true"] > svg, #library-sort[aria-expanded="true"] > svg { transform: rotate(180deg); }
 .menu {
   position: fixed;
   z-index: 10;
@@ -540,7 +521,6 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .slider,
   .slider::before,
-  .language-btn,
   .site-action,
   .remove-site-btn,
   .toast {

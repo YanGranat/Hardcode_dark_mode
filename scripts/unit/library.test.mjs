@@ -261,7 +261,7 @@ test("a settings file round-trips the library and preferences; foreign, oversize
   address.createObjectURL = blob => { blobs.push(blob); return "blob:settings"; };
   address.revokeObjectURL = () => {};
   const context = vm.createContext({ URL: address, Blob: class { constructor(parts) { this.text = parts.join(""); } }, setTimeout, clearTimeout });
-  load(context, "shared/rules.js", "shared/site-utils.js", "shared/requests.js", "shared/backup.js");
+  load(context, "shared/rules.js", "shared/site-utils.js", "shared/languages.js", "shared/requests.js", "shared/backup.js");
   const backup = context.HdmBackup, link = { click() { this.clicked = true; } };
   assert.equal(await backup.save(chrome, { createElement: () => link }, "ru"), 1);
   assert.equal(link.clicked, true); assert.equal(link.href, "blob:settings");
@@ -275,7 +275,7 @@ test("a settings file round-trips the library and preferences; foreign, oversize
   assert.equal(await backup.load(chrome, asFile(blobs[0].text)), 1);
   assert.deepEqual(sent, [{ type: "hdm-library-import", sites: file.sites }]);
   assert.deepEqual(synced, [{ language: "ru", librarySort: "newest" }]);
-  const empty = JSON.stringify({ format: file.format, sites: [], settings: { librarySort: "oldest", language: "de" } });
+  const empty = JSON.stringify({ format: file.format, sites: [], settings: { librarySort: "oldest", language: "fr" } });
   assert.equal(await backup.load(chrome, asFile(empty)), 0, "a backup of an empty library still restores preferences");
   assert.equal(sent.length, 1); assert.deepEqual(synced.at(-1), { librarySort: "oldest" });
   for (const foreign of ["not json", JSON.stringify({ sites: [] }), JSON.stringify({ format: file.format, sites: "all" })]) {

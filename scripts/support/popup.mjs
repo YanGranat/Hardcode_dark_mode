@@ -2,11 +2,11 @@ import vm from "node:vm";
 import { clone, load } from "./modules.mjs";
 
 export function popupFixture({ sites = [{ origin: "https://parent.test", enabled: true }, { origin: "https://child.test", enabled: true }],
-  settings = { language: "en", librarySort: "alphabetical" }, url = "https://parent.test/page", timers = {} } = {}) {
+  settings = { language: "en", librarySort: "alphabetical" }, url = "https://parent.test/page", timers = {}, browserLanguage = "en-US" } = {}) {
   const requests = [], notices = [], details = [], renders = [], writes = [];
   let saved = clone(sites), savedSettings = { ...settings }, changed;
   const api = {
-    i18n: { getUILanguage: () => "en-US" },
+    i18n: { getUILanguage: () => browserLanguage },
     permissions: { contains: async () => true, onAdded: { addListener() {} }, onRemoved: { addListener() {} } },
     tabs: { query: async () => [{ id: 1, url }], sendMessage: () => Promise.resolve({ ok: true }) },
     runtime: { sendMessage: message => new Promise((resolve, reject) => requests.push({ message,
@@ -20,7 +20,7 @@ export function popupFixture({ sites = [{ origin: "https://parent.test", enabled
     }
   };
   const context = vm.createContext({ URL, chrome: api, setTimeout, clearTimeout, ...timers });
-  load(context, "shared/rules.js", "shared/site-utils.js", "shared/requests.js", "popup/state.js", "popup/translations.js");
+  load(context, "shared/rules.js", "shared/site-utils.js", "shared/languages.js", "shared/requests.js", "popup/state.js", "popup/translations.js");
   const model = context.HdmPopupState.create(api, value => renders.push(clone(value)),
     (key, detail) => { notices.push(key); details.push(detail ? clone(detail) : null); });
   return { model, api, requests, notices, details, renders, writes, text: context.HdmPopupText, sorting: context.HdmPopupState,

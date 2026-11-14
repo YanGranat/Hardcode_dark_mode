@@ -1,6 +1,6 @@
 (function exposeBackup(global) {
   const FORMAT = "custom-dark-mode-settings", MAX_FILE_BYTES = 20 * 1024 * 1024;
-  const PREFERENCES = { language: ["en", "ru"], librarySort: ["alphabetical", "newest", "oldest"] };
+  const PREFERENCES = { language: HdmLanguages.codes, librarySort: ["alphabetical", "newest", "oldest"] };
 
   // The file holds stored fields only: everything else is derived from a site's address.
   async function snapshot(chrome, language) {

@@ -274,6 +274,7 @@ await harness.run(async () => {
   await popup.evaluate(() => chrome.storage.sync.set({ librarySort: 'invalid-setting' }));
   await popup.waitForFunction(() => document.getElementById('library-sort').value === 'alphabetical');
   assert.deepEqual(await displayed(), expectedSort.alphabetical);
+  await popup.locator('#language-select').click();
   await popup.locator('[data-language="en"]').click();
   await popup.waitForFunction(() => document.documentElement.lang === 'en');
   assert.deepEqual(await popup.locator('#library-sort-menu [data-i18n]').allTextContents(), ['Alphabetical', 'Newest added', 'Oldest added']);
@@ -317,9 +318,11 @@ await harness.run(async () => {
   await popup.keyboard.press('Shift+Tab');
   assert.equal(await popup.locator('#exclusion-details summary').evaluate(el => el === document.activeElement), true);
   await sortControl.click();
-  await popup.locator('[data-language="en"]').click();
+  await popup.locator('#language-select').click();
   assert.equal(await sortControl.getAttribute('aria-expanded'), 'false');
-  assert.equal(await popup.locator('[data-language="en"]').evaluate(el => el === document.activeElement), true);
+  await popup.keyboard.press('Escape');
+  assert.equal(await popup.locator('#language-select').evaluate(el => el === document.activeElement), true);
+  await popup.locator('#language-select').click();
   await popup.locator('[data-language="ru"]').click();
   await chooseSort('alphabetical');
   await popup.waitForFunction(() => model.snapshot().settings.librarySort === 'alphabetical' &&
@@ -460,6 +463,49 @@ await harness.run(async () => {
       }
     }
     deadline();
+    const languageLayouts = await command('Runtime.evaluate', { expression: `(async () => {
+      const saved = (await chrome.storage.local.get('universalSites')).universalSites;
+      const previousLanguage = document.documentElement.lang, results = [];
+      try {
+        for (const count of [0, 6]) {
+          await chrome.storage.local.set({ universalSites: saved.slice(0, count) });
+          for (const language of ['de', 'en', 'es', 'ru', 'uk']) {
+            await chrome.storage.sync.set({ language });
+            const until = Date.now() + 3000;
+            while ((document.documentElement.lang !== language || document.querySelectorAll('#library-list .site-entry').length !== count) && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 20));
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            const trigger = document.getElementById('language-select'), menu = document.getElementById('language-menu');
+            trigger.click();
+            const bounds = menu.getBoundingClientRect(), anchor = trigger.getBoundingClientRect(), brand = document.querySelector('.brand').getBoundingClientRect();
+            results.push({ language, count, label: document.getElementById('language-label').textContent,
+              checked: [...menu.querySelectorAll('[aria-checked=true]')].map(row => row.dataset.language),
+              width: innerWidth, contentWidth: document.documentElement.scrollWidth,
+              headerGap: anchor.left - brand.right, edgeGap: innerWidth - bounds.right,
+              anchorGap: bounds.top - anchor.bottom, rightGap: Math.abs(bounds.right - anchor.right),
+              fits: bounds.top >= 8 && bounds.bottom <= innerHeight - 8 && bounds.left >= 8 && bounds.right <= innerWidth - 8,
+              rows: [...menu.children].map(row => {
+                const rect = row.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(row.querySelector('span'));
+                const text = range.getBoundingClientRect();
+                return { height: rect.height, textHeight: text.height, fits: text.width <= row.querySelector('span').clientWidth + .1 };
+              }) });
+            trigger.click();
+          }
+        }
+      } finally { await chrome.storage.sync.set({ language: previousLanguage }); await chrome.storage.local.set({ universalSites: saved }); }
+      return results;
+    })()`, awaitPromise: true, returnByValue: true });
+    assert.equal(languageLayouts.result.result.value.length, 10);
+    for (const layout of languageLayouts.result.result.value) {
+      assert.equal(layout.label, layout.language.toUpperCase());
+      assert.deepEqual(layout.checked, [layout.language]);
+      assert.equal(layout.fits, true, JSON.stringify(layout));
+      assert(layout.headerGap >= 11.5 && layout.rightGap < .1 && layout.anchorGap >= 5.5);
+      assert(layout.contentWidth <= layout.width && layout.width <= 360);
+      assert.equal(layout.rows.length, 5);
+      assert(layout.rows.every(row => row.height === 32 && row.textHeight <= 16.1 && row.fits));
+    }
+    console.log('PASS native language dropdown alignment, first/last rows and all five choices in short and full popups');
+    deadline();
     const currentControls = await command('Runtime.evaluate', { expression: `(async () => {
       const results = [], current = document.getElementById('current-site-enabled');
       for (const language of ['en', 'ru']) {
@@ -516,7 +562,7 @@ await harness.run(async () => {
     const sortLayouts = await command("Runtime.evaluate", { expression: `(async () => {
       const results = [];
       const rect = el => { const b = el.getBoundingClientRect(); return { left: b.left, top: b.top, width: b.width, height: b.height }; };
-      for (const language of ['ru', 'en']) {
+      for (const language of ['ru', 'en', 'uk', 'de', 'es']) {
         for (const order of ['alphabetical', 'newest', 'oldest']) {
           await chrome.storage.sync.set({ language, librarySort: order });
           const until = Date.now() + 3000;
@@ -559,7 +605,7 @@ await harness.run(async () => {
         if (index) near(row.bounds.top - layout.rows[index - 1].bounds.top - layout.rows[index - 1].bounds.height, 2);
       }
     }
-    console.log('PASS real sort menu shared width, text/icon columns, uniform type/rows and vertical centering for every EN/RU choice');
+    console.log('PASS real sort menu shared width, text/icon columns, uniform type/rows and vertical centering for every locale');
     for (const language of ['en', 'ru']) {
       await command('Runtime.evaluate', { expression: `(async () => {
         await chrome.storage.sync.set({ language: '${language}' });

@@ -17,7 +17,21 @@ const libraryBackupMenuEl = document.getElementById("library-backup-menu");
 const backupFileEl = document.getElementById("backup-file");
 const exclusionsEl = document.getElementById("exclusions");
 const pickElement = document.getElementById("pick-element");
-const languageButtons = Array.from(document.querySelectorAll(".language-btn"));
+const languageEl = document.getElementById("language-select");
+const languageMenuEl = document.getElementById("language-menu");
+const languageOptions = HdmLanguages.options.map(({ code, label }) => {
+  const button = document.createElement("button"), name = document.createElement("span");
+  button.type = "button";
+  button.dataset.language = code;
+  button.setAttribute("role", "menuitemradio");
+  button.setAttribute("aria-checked", "false");
+  button.tabIndex = -1;
+  name.lang = code;
+  name.textContent = label;
+  button.append(name, librarySortOptions[0].querySelector("svg").cloneNode(true));
+  languageMenuEl.append(button);
+  return button;
+});
 const modeButtons = [...document.querySelectorAll("[data-mode]")];
 
 let currentLanguage = "en", pickerPending = false, toastTimer = null;
@@ -48,11 +62,11 @@ function applyLanguage(language) {
     element.title = translate(element.dataset.i18nTitle);
   });
 
-  languageButtons.forEach((button) => {
-    const isActive = button.dataset.language === currentLanguage;
-    button.classList.toggle("active", isActive);
-    button.setAttribute("aria-pressed", String(isActive));
-  });
+  const selectedLanguage = HdmLanguages.options.find(option => option.code === currentLanguage);
+  languageEl.value = currentLanguage;
+  document.getElementById("language-label").textContent = currentLanguage.toUpperCase();
+  languageEl.setAttribute("aria-label", `${translate("languageSelector")}: ${selectedLanguage.label}`);
+  languageOptions.forEach(button => button.setAttribute("aria-checked", String(button.dataset.language === currentLanguage)));
 }
 
 function hideToast() {
@@ -362,12 +376,6 @@ function fitLibrary() {
   libraryListEl.classList.toggle("overflowing", libraryListEl.children.length > capacity);
 }
 
-languageButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    model.saveSettings({ language: button.dataset.language });
-  });
-});
-
 modeButtons.forEach(button => button.addEventListener("click", () => model.setMode(button.dataset.mode)));
 document.querySelector('.theme-mode').addEventListener('keydown', event => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -430,6 +438,13 @@ function createMenu(trigger, menu, initialItem = () => null) {
   window.addEventListener("resize", () => close(menu.contains(document.activeElement)));
   return { close };
 }
+
+const languageMenu = createMenu(languageEl, languageMenuEl,
+  () => languageOptions.find(option => option.dataset.language === currentLanguage));
+languageOptions.forEach(option => option.addEventListener("click", () => {
+  languageMenu.close(true);
+  model.saveSettings({ language: option.dataset.language });
+}));
 
 const sortMenu = createMenu(librarySortEl, librarySortMenuEl,
   () => librarySortOptions.find(option => option.dataset.sort === librarySortEl.value));

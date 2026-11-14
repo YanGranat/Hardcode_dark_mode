@@ -96,10 +96,12 @@ await harness.run(async () => {
     await popup.waitForFunction(() => document.getElementById("library-sort").value === "newest");
     assert.equal(await popup.locator("#toast").textContent(), failed);
     assert.equal(await popup.locator("#toast").evaluate(element => element.classList.contains("show")), true);
+    await popup.locator('#language-select').click();
     await popup.locator('[data-language="ru"]').click();
     await popup.waitForFunction(() => model.snapshot().settings.language === "ru");
     assert.equal(await popup.locator("#toast").textContent(), failed);
     await popup.locator("#toast").evaluate(element => element.classList.remove("show"));
+    await popup.locator('#language-select').click();
     await popup.locator('[data-language="en"]').click();
     await popup.waitForFunction(() => model.snapshot().settings.language === "en");
     assert.equal(await popup.locator("#toast").evaluate(element => element.classList.contains("show")), false);

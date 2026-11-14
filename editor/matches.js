@@ -1,15 +1,8 @@
 (function exposeMatches(global) {
   function open(rule, { language, parentRule, scopes, onClose }) {
-    const text = language === "ru" ? {
-      count: "Совпадений", rendered: "Отображается", previous: "Предыдущее", next: "Следующее", close: "Закрыть",
-      moveDown: "Переместить панель вниз", moveUp: "Переместить панель вверх",
-      overflow: "Слишком много совпадений. Уточните правило.", empty: "На этой странице совпадений нет."
-    } : {
-      count: "Matches", rendered: "Rendered", previous: "Previous", next: "Next", close: "Close",
-      moveDown: "Move panel down", moveUp: "Move panel up",
-      overflow: "Too many matches. Narrow the rule.", empty: "No matches on this page."
-    };
+    const text = HdmEditorText.matches(language);
     const host = document.createElement("div");
+    host.lang = HdmLanguages.normalize(language);
     host.setAttribute("data-hdm-picker", "matches");
     host.setAttribute("data-hdm-matches", "");
     host.setAttribute("popover", "manual");

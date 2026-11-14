@@ -16,7 +16,7 @@ function options(browserLanguage = "en") {
     sync: { get: () => initial }, onChanged: { addListener: listener => { change = listener; } }
   } };
   const context = vm.createContext({ document, chrome });
-  load(context, "popup/translations.js", "options/options.js");
+  load(context, "shared/languages.js", "popup/translations.js", "options/options.js");
   return { document, elements, context, resolve, reject, change,
     settle: () => new Promise(done => setImmediate(done)) };
 }
@@ -57,5 +57,18 @@ test("options retains browser fallback after a failed read and handles later rem
   h.reject(Error("unavailable")); await h.settle();
   assert.equal(h.document.documentElement.lang, "ru");
   h.change({ language: {} }, "sync");
-  assert.equal(h.document.documentElement.lang, "en");
+  assert.equal(h.document.documentElement.lang, "ru");
+});
+
+test("options detects every added browser locale and applies saved language changes", async () => {
+  for (const [tag, expected] of [["de-CH", "de"], ["es-AR", "es"], ["uk-UA", "uk"], ["fr-FR", "en"]]) {
+    const h = options(tag);
+    assert.equal(h.document.documentElement.lang, expected);
+    h.resolve({ language: "es" }); await h.settle();
+    assert.equal(h.document.documentElement.lang, "es");
+    h.change({ language: { newValue: "uk" } }, "sync");
+    assert.equal(h.document.documentElement.lang, "uk");
+    h.change({ language: {} }, "sync");
+    assert.equal(h.document.documentElement.lang, expected);
+  }
 });

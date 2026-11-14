@@ -15,7 +15,7 @@
   }
 
   function create(chrome, changed, notice) {
-    const defaults = { librarySort: "alphabetical", language: chrome.i18n.getUILanguage().toLowerCase().startsWith("ru") ? "ru" : "en" };
+    const defaults = { librarySort: "alphabetical", language: HdmLanguages.detect(chrome.i18n.getUILanguage()) };
     let settings = { ...defaults }, sites = [], tab = null, currentSite = { supported: false };
     let settingsQueue = Promise.resolve(), initializing = true, libraryRevision = 0, accessRevision = 0, currentAccess = null;
     const initialSettingsChanges = {}, settingsRevisions = {}, pending = new Map();

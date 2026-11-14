@@ -16,9 +16,12 @@
             <div class="subtitle" data-i18n="subtitle">Your page, your dark theme</div>
           </div>
         </div>
-        <div class="language-switch" role="group" aria-label="Interface language" data-i18n-aria-label="languageSelector">
-          <button type="button" class="language-btn" data-language="en" aria-label="English">EN</button>
-          <button type="button" class="language-btn" data-language="ru" aria-label="Русский">RU</button>
+        <div class="language-picker">
+          <button id="language-select" type="button" value="en" aria-label="Interface language: English" aria-haspopup="menu" aria-expanded="false" aria-controls="language-menu">
+            <span id="language-label" aria-hidden="true">EN</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div id="language-menu" class="menu" role="menu" aria-label="Interface language" data-i18n-aria-label="languageSelector" hidden></div>
         </div>
       </header>
 
@@ -92,6 +95,7 @@
 
     <script src="../shared/rules.js"></script>
     <script src="../shared/site-utils.js"></script>
+    <script src="../shared/languages.js"></script>
     <script src="../shared/requests.js"></script>
     <script src="../shared/backup.js"></script>
     <script src="translations.js"></script>

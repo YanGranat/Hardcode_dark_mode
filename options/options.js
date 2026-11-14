@@ -4,7 +4,7 @@ const exportButton = document.getElementById("export");
 const importButton = document.getElementById("import");
 const fileInput = document.getElementById("file");
 const statusEl = document.getElementById("status");
-let language = chrome.i18n.getUILanguage().toLowerCase().startsWith("ru") ? "ru" : "en";
+let language = HdmLanguages.detect(chrome.i18n.getUILanguage());
 let languageChanged = false;
 
 const translate = (key, values) => HdmPopupText.translate(language, key, values);
@@ -37,7 +37,7 @@ fileInput.addEventListener("change", () => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync" && changes.language) {
     languageChanged = true;
-    applyLanguage(changes.language.newValue);
+    applyLanguage(changes.language.newValue ?? HdmLanguages.detect(chrome.i18n.getUILanguage()));
   }
 });
 

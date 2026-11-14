@@ -111,6 +111,7 @@ await harness.run(async () => {
   console.log("PASS transparent body preserves existing html background");
   harness.deadline();
 
+  await popup.locator('#language-select').click();
   await popup.locator('[data-language="ru"]').click();
   await popup.waitForFunction(() => document.documentElement.lang === "ru");
   await popup.evaluate(async () => {
@@ -126,7 +127,7 @@ await harness.run(async () => {
   assert.equal((await state(page)).filter, "invert(0.9) hue-rotate(180deg)");
   await popup.reload();
   await popup.waitForFunction(() => document.documentElement.lang === "ru");
-  assert.equal(await popup.locator('[data-language="ru"]').getAttribute("aria-pressed"), "true");
+  assert.equal(await popup.locator('[data-language="ru"]').getAttribute("aria-checked"), "true");
   assert.equal(await popup.locator('#toggle-deepl, #toggle-google, [data-theme]').count(), 0);
   console.log("PASS popup language persistence, rapid changes and removal of retired controls");
   harness.deadline();
@@ -324,7 +325,7 @@ await harness.run(async () => {
   await popup.reload();
   await popup.waitForFunction(() => document.getElementById("library-count").textContent === "1");
   assert.equal(await popup.locator("#current-site-action").isEnabled(), true);
-  assert.equal(await popup.locator('[data-language="ru"]').getAttribute("aria-pressed"), "true");
+  assert.equal(await popup.locator('[data-language="ru"]').getAttribute("aria-checked"), "true");
   await popup.locator("#current-site-action").click();
   await popup.waitForFunction(async () => (await chrome.storage.local.get("universalSites")).universalSites.length === 0, null, { timeout: 1000 });
   await activeWorker.evaluate(() => {

@@ -1,0 +1,5 @@
+{
+  "extensionName": { "message": "Custom Dark Mode" },
+  "extensionDescription": { "message": "Crea tu propio tema oscuro: invierte toda la página o selecciona bloques individuales." },
+  "extensionActionTitle": { "message": "Custom Dark Mode" }
+}

@@ -209,7 +209,9 @@ await harness.run(async () => {
   samePixels(await capture('.slide-surface'), originalSlide, 'Rapid mode changes must finish with original slide colors');
 
   let referenceHeights;
-  for (const language of ['en', 'ru']) {
+  for (const language of ['en', 'ru', 'uk', 'de', 'es']) {
+    deadline();
+    await popup.locator('#language-select').click();
     await popup.locator(`[data-language="${language}"]`).click();
     await popup.waitForFunction(language => document.documentElement.lang === language, language);
     for (const value of ['page', 'selected']) {
@@ -219,13 +221,13 @@ await harness.run(async () => {
         const text = range.getBoundingClientRect();
         return { height: rect.height, width: rect.width, fits: text.width <= button.clientWidth && text.height <= button.clientHeight };
       }));
-      assert(geometry.every(button => button.fits), 'Real EN/RU mode labels must fit their buttons');
+      assert(geometry.every(button => button.fits), 'Localized mode labels must fit their buttons');
       assert(Math.abs(geometry[0].height - geometry[1].height) < .1 && Math.abs(geometry[0].width - geometry[1].width) < .1);
       if (referenceHeights) assert(geometry.every((button, index) => Math.abs(button.height - referenceHeights[index]) < .1));
       else referenceHeights = geometry.map(button => button.height);
     }
   }
-  console.log('PASS ambiguous and conflicting selectors fail closed, rapid mode intent and EN/RU control geometry');
+  console.log('PASS ambiguous and conflicting selectors fail closed, rapid mode intent and localized control geometry');
   deadline();
   await page.evaluate(() => {
     const fixture = document.createElement('section'); fixture.id = 'media-fixture';
