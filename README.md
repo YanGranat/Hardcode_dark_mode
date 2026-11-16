@@ -10,7 +10,7 @@ More screenshots: [whole-page mode](docs/screenshots/whole-page.png) · [selecte
 
 ## Install
 
-Requires Chrome 119 or newer. Open `chrome://extensions/`, enable **Developer mode**, click **Load unpacked**, and select this folder. No build step is needed.
+Requires Chrome 119 or newer. Download and extract the extension ZIP from the [latest release](https://github.com/YanGranat/Hardcode_dark_mode/releases/latest). Open `chrome://extensions/`, enable **Developer mode**, click **Load unpacked**, and select the extracted folder. You can also load this source folder directly; no build step is needed.
 
 After source changes, reload the extension and refresh already open themed tabs.
 
@@ -20,6 +20,8 @@ Open a site, open the popup, and click **Add site**. Sites outside the library s
 
 - **Whole page** inverts the page. **Exclude element** adds exceptions to the page theme.
 - **Selected blocks** leaves the page unchanged until you **Configure block**. Add exceptions inside the block to preserve their original rendered colors without reversing the inversion.
+
+![Add a site, exclude the newsletter bar, and review the saved rule in the popup](docs/screenshots/demo.gif)
 
 Click an element to preview it. **Larger** and **Smaller** adjust the selection. Choose **Similar elements** to include matching current and future elements; check the outlines and match count before saving.
 
