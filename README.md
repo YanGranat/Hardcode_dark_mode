@@ -10,7 +10,9 @@ More screenshots: [whole-page mode](docs/screenshots/whole-page.png) · [selecte
 
 ## Install
 
-Requires Chrome 119 or newer. Download and extract the extension ZIP from the [latest release](https://github.com/YanGranat/Hardcode_dark_mode/releases/latest). Open `chrome://extensions/`, enable **Developer mode**, click **Load unpacked**, and select the extracted folder. You can also load this source folder directly; no build step is needed.
+Requires Chrome 119 or newer. [Install from Chrome Web Store](https://chromewebstore.google.com/detail/afeomckkfillfkdjpigokjmoomigcdfb).
+
+For manual installation, download and extract the extension ZIP from the [latest release](https://github.com/YanGranat/Hardcode_dark_mode/releases/latest). Open `chrome://extensions/`, enable **Developer mode**, click **Load unpacked**, and select the extracted folder. You can also load this source folder directly; no build step is needed.
 
 After source changes, reload the extension and refresh already open themed tabs.
 
