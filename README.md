@@ -1,4 +1,4 @@
-# Custom Dark Mode
+# Hardcode Dark Mode
 
 A Chrome extension for building a dark theme on each site: invert the whole page with exclusions, or invert only selected blocks.
 

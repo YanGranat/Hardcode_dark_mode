@@ -365,7 +365,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 function scheduleReconciliation() {
   return enqueue(reconcileUniversalSites).catch(() => {
     // Never log addresses, page text or arbitrary browser error messages.
-    console.warn("Custom Dark Mode: could not reconcile site settings.");
+    console.warn("Hardcode Dark Mode: could not reconcile site settings.");
   });
 }
 

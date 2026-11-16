@@ -18,7 +18,7 @@
     const data = await snapshot(chrome, language);
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
-    link.download = `custom-dark-mode-settings-${data.exportedAt.slice(0, 10)}.json`;
+    link.download = `hardcode-dark-mode-settings-${data.exportedAt.slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(link.href);
     return data.sites.length;

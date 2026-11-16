@@ -365,12 +365,16 @@ await harness.run(async () => {
       const body = document.body, style = getComputedStyle(body);
       const list = document.getElementById('library-list');
       list.scrollTop = list.scrollHeight;
-      return { count: document.getElementById('library-count').textContent, height: body.offsetHeight, content: body.scrollHeight, repeat: style.backgroundRepeat,
+      return { name: chrome.i18n.getMessage('extensionName'), title: document.title, brand: document.querySelector('.title').textContent,
+        count: document.getElementById('library-count').textContent, height: body.offsetHeight, content: body.scrollHeight, repeat: style.backgroundRepeat,
         libraryScroll: list.scrollTop, scrollbar: getComputedStyle(list, '::-webkit-scrollbar').width,
         scrollbarButton: getComputedStyle(list, '::-webkit-scrollbar-button').display,
         width: innerWidth, maxWidth: document.documentElement.scrollWidth, viewport: innerHeight, scroll: scrollY };
     })()`, returnByValue: true, awaitPromise: true });
     const geometry = measured.result.result.value;
+    assert.equal(geometry.name, "Hardcode Dark Mode");
+    assert.equal(geometry.title, geometry.name);
+    assert.equal(geometry.brand, geometry.name);
     assert.equal(geometry.count, "13");
     assert.equal(geometry.scrollbar, "6px");
     assert.equal(geometry.scrollbarButton, "none");

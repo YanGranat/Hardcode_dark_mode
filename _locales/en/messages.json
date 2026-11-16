@@ -1,11 +1,11 @@
 {
   "extensionName": {
-    "message": "Custom Dark Mode"
+    "message": "Hardcode Dark Mode"
   },
   "extensionDescription": {
     "message": "Build your own dark theme: invert a whole page or select individual blocks."
   },
   "extensionActionTitle": {
-    "message": "Custom Dark Mode"
+    "message": "Hardcode Dark Mode"
   }
 }

@@ -2,7 +2,7 @@
 
 Last updated: November 14, 2026
 
-Custom Dark Mode changes website colors according to rules you choose. It has no developer-operated servers, analytics, advertising, or remote code.
+Hardcode Dark Mode changes website colors according to rules you choose. It has no developer-operated servers, analytics, advertising, or remote code.
 
 ## Website access
 
@@ -10,7 +10,7 @@ The extension processes page structure, element attributes, and rendering inform
 
 Page contents, browsing activity, and theme rules are not sent to the developer or third parties by the extension.
 
-This information is used only to provide the theme controls you choose. It is not sold or used for advertising, profiling, or unrelated purposes. Custom Dark Mode's use of user information complies with the [Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/policies#limited-use), including its Limited Use requirements.
+This information is used only to provide the theme controls you choose. It is not sold or used for advertising, profiling, or unrelated purposes. Hardcode Dark Mode's use of user information complies with the [Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/policies#limited-use), including its Limited Use requirements.
 
 ## Saved settings
 

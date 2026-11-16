@@ -264,7 +264,7 @@ test("a settings file round-trips the library and preferences; foreign, oversize
   const backup = context.HdmBackup, link = { click() { this.clicked = true; } };
   assert.equal(await backup.save(chrome, { createElement: () => link }, "ru"), 1);
   assert.equal(link.clicked, true); assert.equal(link.href, "blob:settings");
-  assert.match(link.download, /^custom-dark-mode-settings-\d{4}-\d{2}-\d{2}\.json$/);
+  assert.match(link.download, /^hardcode-dark-mode-settings-\d{4}-\d{2}-\d{2}\.json$/);
   const file = JSON.parse(blobs[0].text);
   assert.equal(file.format, "custom-dark-mode-settings");
   assert.equal(file.version, 1);

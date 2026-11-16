@@ -1,5 +1,5 @@
 {
-  "extensionName": { "message": "Custom Dark Mode" },
+  "extensionName": { "message": "Hardcode Dark Mode" },
   "extensionDescription": { "message": "Gestalte dein eigenes dunkles Design: Invertiere ganze Seiten oder wähle einzelne Bereiche aus." },
-  "extensionActionTitle": { "message": "Custom Dark Mode" }
+  "extensionActionTitle": { "message": "Hardcode Dark Mode" }
 }
