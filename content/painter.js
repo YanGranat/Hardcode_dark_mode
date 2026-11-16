@@ -13,13 +13,14 @@
     const marked = new Set(), styles = new Map();
     const mediaMarked = new Set(), fullscreenMarked = new Set();
     let observedScopes = new Set();
-    let usesClasses = true, usesIds = true;
+    let usesClasses = true, usesIds = true, needsAllAttributes = false, observesAllAttributes = false;
     const observer = new MutationObserver(mutations => {
-      if (mutations.some(mutation => !(mutation.attributeName === "class" && !usesClasses) &&
+      if (mutations.some(mutation => !mutation.attributeName?.startsWith("data-hdm-") &&
+          !(mutation.attributeName === "class" && !usesClasses) &&
           !(mutation.attributeName === "id" && !usesIds) && !HdmSelectors.owned(mutation.target) &&
           !(mutation.type === "childList" && [...mutation.addedNodes, ...mutation.removedNodes].every(HdmSelectors.owned)) &&
           (mutation.attributeName !== "style" ||
-          backgroundChanged(mutation)))) schedule();
+          needsAllAttributes || backgroundChanged(mutation)))) schedule();
     });
     function backgroundChanged(mutation) {
       const style = document.createElement("span").style;
@@ -113,6 +114,7 @@
       // Attribute names may contain CSS escapes, comments or namespace prefixes.
       usesClasses = paths.some(selector => /[.\[\\]/.test(selector));
       usesIds = paths.some(selector => /[#:\[\\]/.test(selector));
+      needsAllAttributes = paths.some(selector => /[\[\\]/.test(selector));
       const targets = resolveRules(effective);
       protectedTargets = [];
       suspendProtection = false;
@@ -169,12 +171,13 @@
       trackGeometry();
       for (const [scope, style] of styles) if (!scopes.has(scope)) { style.remove(); styles.delete(scope); }
       const watching = new Set(active && (rules.length || preview || editorDraft) ? [document, ...getShadowRoots()] : []);
-      if (watching.size !== observedScopes.size || [...watching].some(scope => !observedScopes.has(scope))) {
+      if (needsAllAttributes !== observesAllAttributes || watching.size !== observedScopes.size || [...watching].some(scope => !observedScopes.has(scope))) {
         observer.disconnect();
         observedScopes = watching;
+        observesAllAttributes = needsAllAttributes;
         for (const scope of watching) {
           observer.observe(scope, { childList: true, subtree: true, attributes: true, attributeOldValue: invert,
-            attributeFilter: invert ? ["id", "class", "style", "slot", "name", "open"] : ["id", "class"] });
+            ...(needsAllAttributes ? {} : { attributeFilter: invert ? ["id", "class", "style", "slot", "name", "open"] : ["id", "class"] }) });
           // Popover events do not leave their shadow tree, so each one is watched itself.
           if (invert && scope !== document && !toggleScopes.has(scope)) {
             toggleScopes.add(scope);

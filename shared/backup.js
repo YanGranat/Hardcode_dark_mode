@@ -1,5 +1,5 @@
 (function exposeBackup(global) {
-  const FORMAT = "custom-dark-mode-settings", MAX_FILE_BYTES = 20 * 1024 * 1024;
+  const FORMAT = "custom-dark-mode-settings", VERSION = 1, MAX_FILE_BYTES = 20 * 1024 * 1024;
   const PREFERENCES = { language: HdmLanguages.codes, librarySort: ["alphabetical", "newest", "oldest"] };
 
   // The file holds stored fields only: everything else is derived from a site's address.
@@ -10,7 +10,7 @@
     ]);
     const sites = HdmSites.normalizeLibrary(universalSites).map(({ origin, enabled, addedAt, mode, exclusions, inclusions, protections }) =>
       ({ origin, enabled, addedAt, mode, exclusions, inclusions, protections }));
-    return { format: FORMAT, version: 1, exportedAt: new Date().toISOString(), settings, sites };
+    return { format: FORMAT, version: VERSION, exportedAt: new Date().toISOString(), settings, sites };
   }
 
   // Starts a download from an extension page and resolves with the number of saved sites.
@@ -31,7 +31,8 @@
       if (file.size > MAX_FILE_BYTES) throw Error("too_large");
       data = JSON.parse(await file.text());
     } catch { data = null; }
-    if (data?.format !== FORMAT || !Array.isArray(data.sites)) throw Error("invalid_file");
+    if (data?.format !== FORMAT || (data.version !== undefined && data.version !== VERSION) ||
+        !Array.isArray(data.sites)) throw Error("invalid_file");
     // A backup of an empty library still carries the preferences.
     const response = data.sites.length
       ? await HdmRequests.send(() => chrome.runtime.sendMessage({ type: "hdm-library-import", sites: data.sites }), 15000, "request_timeout")

@@ -267,6 +267,7 @@ test("a settings file round-trips the library and preferences; foreign, oversize
   assert.match(link.download, /^custom-dark-mode-settings-\d{4}-\d{2}-\d{2}\.json$/);
   const file = JSON.parse(blobs[0].text);
   assert.equal(file.format, "custom-dark-mode-settings");
+  assert.equal(file.version, 1);
   assert.deepEqual(file.settings, { language: "ru", librarySort: "newest" }, "preferences are written even when they were never stored");
   assert.deepEqual(file.sites, [{ origin: "https://parent.test", enabled: true, addedAt: 3, mode: "selected", exclusions: [],
     inclusions: [{ path: ["#work"], label: "div#work" }], protections: [] }], "only stored, normalized fields are written");
@@ -279,6 +280,12 @@ test("a settings file round-trips the library and preferences; foreign, oversize
   assert.equal(sent.length, 1); assert.deepEqual(synced.at(-1), { librarySort: "oldest" });
   for (const foreign of ["not json", JSON.stringify({ sites: [] }), JSON.stringify({ format: file.format, sites: "all" })]) {
     await assert.rejects(backup.load(chrome, asFile(foreign)), /invalid_file/);
+  }
+  for (const version of [0, 2, "1", null]) {
+    const before = { messages: sent.length, preferences: synced.length };
+    await assert.rejects(backup.load(chrome, asFile(JSON.stringify({ ...file, version }))), /invalid_file/);
+    assert.deepEqual({ messages: sent.length, preferences: synced.length }, before,
+      "an unsupported settings version must not change the library or preferences");
   }
   await assert.rejects(backup.load(chrome, { size: 21 * 1024 * 1024, text: async () => blobs[0].text }), /invalid_file/);
   chrome.runtime.sendMessage = async () => ({ ok: false, error: "nothing_to_import" });

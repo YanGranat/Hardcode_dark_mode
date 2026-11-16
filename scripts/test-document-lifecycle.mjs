@@ -108,17 +108,47 @@ await harness.run(async () => {
   assert.equal(await page.evaluate(() => { window.probe.disconnect(); return window.ownedWrites; }), 0);
   console.log("PASS unchanged protected geometry performs no DOM writes");
 
-  for (const [attribute, path, value] of [["class", '[cl\\61 ss~="enabled"]', "enabled"], ["id", '[i\\64="identified"]', "identified"]]) {
+  for (const [attribute, path, value] of [
+    ["class", '[cl\\61 ss~="enabled"]', "enabled"],
+    ["id", '[i\\64="identified"]', "identified"],
+    ["data-state", '[data-state="ready"]', "ready"],
+    ["title", '[ti\\74 le="ready"]', "ready"],
+    ["style", '[style*="outline-color"]', "width:100px;height:100px;background:white;outline-color:red"],
+  ]) {
     await page.evaluate(() => { const node = document.createElement("section"); node.id = "dependency"; node.style.cssText = "width:100px;height:100px;background:white"; document.body.append(node); });
+    const target = await page.locator("#dependency").elementHandle();
     await send({ type: "hdm-inversion-save", origin: "http://127.0.0.1", rule: { path: [path], label: "section" } });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await page.locator("#dependency").evaluate((node, { attribute, value }) => node.setAttribute(attribute, value), { attribute, value });
     assert.equal(await page.locator(path).count(), 1, `native selector must match after changing ${attribute}: ${path}`);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    assert.equal(await page.locator(path).getAttribute("data-hdm-inverted"), "root", "escaped attribute changes update a saved selector's match");
-    await page.locator(path).evaluate(node => node.remove());
+    assert.equal(await page.locator(path).getAttribute("data-hdm-inverted"), "root", `attribute changes update a saved selector's match: ${path}`);
+    await page.locator(path).evaluate((node, attribute) => node.removeAttribute(attribute), attribute);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await target.getAttribute("data-hdm-inverted"), null,
+      "a nonmatching attribute must release the selected rule");
+    await target.evaluate(node => node.remove());
+    await target.dispose();
+    await send({ type: "hdm-inversion-remove", origin: "http://127.0.0.1", path: [path] });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   }
-  console.log("PASS escaped attribute selectors retain dynamic matching");
+  const current = await popup.evaluate(() => chrome.runtime.sendMessage({ type: "hdm-universal-get-sites" }));
+  const previousRule = current.sites.find(site => site.origin === "http://127.0.0.1").inclusions.find(rule => rule.path[0] === "#work");
+  await send({ type: "hdm-inversion-save", origin: "http://127.0.0.1", previousRule,
+    rule: { ...previousRule, protections: [{ path: ['[data-original="yes"]'] }] } });
+  await page.waitForFunction(() => !document.getElementById("work").hasAttribute("data-hdm-cutout"));
+  await page.evaluate(() => document.getElementById("keep").setAttribute("data-original", "yes"));
+  await page.waitForFunction(() => document.getElementById("work").getAttribute("data-hdm-cutout") === "mask");
+  await page.evaluate(() => document.getElementById("keep").removeAttribute("data-original"));
+  await page.waitForFunction(() => !document.getElementById("work").hasAttribute("data-hdm-cutout"));
+  await send({ type: "hdm-universal-set-mode", origin: "http://127.0.0.1", mode: "page" });
+  await send({ type: "hdm-exclusion-add", origin: "http://127.0.0.1", rule: { path: ['[data-exempt="yes"]'] } });
+  await page.evaluate(() => document.getElementById("keep").setAttribute("data-exempt", "yes"));
+  await page.waitForFunction(() => document.getElementById("keep").getAttribute("data-hdm-excluded") === "root");
+  await page.evaluate(() => document.getElementById("keep").removeAttribute("data-exempt"));
+  await page.waitForFunction(() => !document.getElementById("keep").hasAttribute("data-hdm-excluded"));
+  await send({ type: "hdm-universal-set-mode", origin: "http://127.0.0.1", mode: "selected" });
+  console.log("PASS attribute and inline-style selectors update and release matches in both modes");
 
   await page.evaluate(() => { window.documentToken = crypto.randomUUID(); });
   const token = await page.evaluate(() => window.documentToken);
