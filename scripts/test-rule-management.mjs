@@ -340,6 +340,9 @@ await harness.run(async () => {
   assert.equal((await send({ type: "hdm-inversion-save", origin, rule: parent })).ok, true);
   const optionsPage = await context.newPage();
   await optionsPage.goto(`chrome-extension://${extension}/options/options.html`);
+  await optionsPage.evaluate(() => { HdmBackup.save = async () => { throw Error("export unavailable"); }; });
+  await optionsPage.locator("#export").click();
+  await optionsPage.locator("#status.error").waitFor();
   const languageTrigger = popup.locator("#language-select"), languageMenu = popup.locator("#language-menu");
   await languageTrigger.press("ArrowDown");
   await popup.keyboard.press("Home");
@@ -379,6 +382,7 @@ await harness.run(async () => {
     await popup.keyboard.press("Escape");
     const expected = await popup.evaluate(language => ({ popup: HdmPopupText.messages[language] }), language);
     assert.equal(await optionsPage.locator("#export").textContent(), expected.popup.backupExport);
+    assert.equal(await optionsPage.locator("#status").textContent(), expected.popup.backupExportFailed);
     for (const mode of ["page", "selected"]) {
       assert.equal((await send({ type: "hdm-universal-set-mode", origin, mode })).ok, true);
       await popup.waitForFunction(mode => document.querySelector(`[data-mode="${mode}"]`).getAttribute("aria-pressed") === "true", mode);
@@ -404,6 +408,44 @@ await harness.run(async () => {
     await popup.waitForFunction(language => document.documentElement.lang === language, language);
     assert.equal(await popup.locator("#language-select").evaluate(node => node.value), language);
   }
+  await optionsPage.evaluate(() => { HdmBackup.save = async () => 7; });
+  await optionsPage.locator("#export").click();
+  await optionsPage.waitForFunction(() => !document.getElementById("status").classList.contains("error"));
+  await popup.locator("#current-site-action").click();
+  await popup.locator("#toast-action").waitFor({ state: "visible" });
+  const undoTimer = await popup.evaluate(() => toastTimer);
+  for (const language of ["de", "en", "es", "ru", "uk"]) {
+    await popup.evaluate(language => chrome.storage.sync.set({ language }), language);
+    await popup.waitForFunction(language => document.documentElement.lang === language, language);
+    await optionsPage.waitForFunction(language => document.documentElement.lang === language, language);
+    const text = await popup.evaluate(() => ({ removed: translate("siteRemoved"), undo: translate("undo"),
+      exported: translate("backupExported", { count: 7 }) }));
+    assert.equal(await popup.locator("#toast-text").textContent(), text.removed);
+    assert.equal(await popup.locator("#toast-action").textContent(), text.undo);
+    assert.equal(await popup.evaluate(() => toastTimer), undoTimer, "translation does not extend the Undo deadline");
+    assert.equal(await optionsPage.locator("#status").textContent(), text.exported);
+  }
+  await popup.locator("#toast-action").click();
+  await popup.waitForFunction(() => document.getElementById("toast-text").textContent === translate("siteRestored"));
+  assert.equal((await stored()).inclusions[0].path[0], "#workspace", "translated Undo retains its original action");
+  if (!await popup.locator("#exclusion-details").evaluate(node => node.open)) {
+    await popup.locator("#exclusion-details > summary").click();
+  }
+  const row = popup.locator("#exclusion-list > .exclusion-row").first();
+  if (await row.locator(":scope > .rule-settings-btn").getAttribute("aria-expanded") !== "true") {
+    await row.locator(":scope > .rule-settings-btn").click();
+  }
+  await popup.evaluate(() => { window.originalShowRule = model.showRule; model.showRule = async () => { throw Error("settings_changed"); }; });
+  try {
+    await row.locator(":scope > .rule-settings > .rule-show").click();
+    await popup.waitForFunction(() => document.getElementById("toast-text").textContent === translate("matchesFailed"));
+    for (const language of ["de", "en", "es", "ru", "uk"]) {
+      await popup.evaluate(language => chrome.storage.sync.set({ language }), language);
+      await popup.waitForFunction(language => document.documentElement.lang === language, language);
+      assert.equal(await popup.locator("#toast-text").textContent(), await popup.evaluate(() => translate("matchesFailed")));
+    }
+  } finally { await popup.evaluate(() => { model.showRule = window.originalShowRule; delete window.originalShowRule; }); }
+  console.log("PASS localized errors, result counts and Undo retain their meaning and lifetime across language changes");
   await optionsPage.close();
   const earlyPopup = await context.newPage();
   await earlyPopup.addInitScript(() => {

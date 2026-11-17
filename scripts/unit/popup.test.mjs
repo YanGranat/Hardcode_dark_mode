@@ -110,6 +110,27 @@ test("initialization reads storage and the active tab without contacting a busy 
   assert.equal(h.model.snapshot().currentSite.origin, origin);
 });
 
+test("initial read failures report loading rather than saving and permit another initialization", async () => {
+  for (const [owner, key] of [["local", "get"], ["sync", "get"], ["tabs", "query"]]) {
+    const h = popupFixture(), api = owner === "tabs" ? h.api.tabs : h.api.storage[owner], original = api[key];
+    api[key] = async () => { throw Error("unavailable"); };
+    await h.init();
+    assert.deepEqual(h.notices, ["settingsLoadFailed"]);
+    assert.equal(h.model.canPick(), false);
+    assert.deepEqual(h.requests, []); assert.deepEqual(h.writes, []);
+    api[key] = original; await h.init();
+    assert.equal(h.model.canPick(), true);
+  }
+});
+
+test("a failed read after a site change does not misreport a failed write", async () => {
+  const h = popupFixture(); await h.init();
+  h.api.storage.local.get = async () => { throw Error("read failed"); };
+  const change = h.model.setEnabled(origin, false); h.requests[0].resolve(); await change;
+  assert.equal(h.notices.at(-1), "settingsLoadFailed");
+  assert.equal(h.model.isPending(), false);
+});
+
 test("events during initialization remain newer than its storage snapshots", async () => {
   const h = popupFixture();
   let settings, library;

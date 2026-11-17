@@ -91,7 +91,9 @@ await harness.run(async () => {
   // 1. A visible notice keeps its own text when the popup re-renders.
   {
     harness.deadline();
-    const failed = await popup.evaluate(() => { showToast(translate("operationFailed")); return translate("operationFailed"); });
+    await popup.evaluate(() => chrome.storage.sync.set({ language: "en" }));
+    await popup.waitForFunction(() => document.documentElement.lang === "en");
+    const failed = await popup.evaluate(() => { showToast("operationFailed"); return translate("operationFailed"); });
     await popup.evaluate(() => chrome.storage.sync.set({ librarySort: "newest" }));
     await popup.waitForFunction(() => document.getElementById("library-sort").value === "newest");
     assert.equal(await popup.locator("#toast").textContent(), failed);
@@ -99,7 +101,7 @@ await harness.run(async () => {
     await popup.locator('#language-select').click();
     await popup.locator('[data-language="ru"]').click();
     await popup.waitForFunction(() => model.snapshot().settings.language === "ru");
-    assert.equal(await popup.locator("#toast").textContent(), failed);
+    assert.equal(await popup.locator("#toast").textContent(), await popup.evaluate(() => translate("operationFailed")));
     await popup.locator("#toast").evaluate(element => element.classList.remove("show"));
     await popup.locator('#language-select').click();
     await popup.locator('[data-language="en"]').click();

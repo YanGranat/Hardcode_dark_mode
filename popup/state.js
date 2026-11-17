@@ -60,7 +60,7 @@
         const stored = await chrome.storage.local.get({ universalSites: [] });
         if (pending.get(origin)?.id !== id) return;
         if (libraryRevision === revision) sites = HdmSites.normalizeLibrary(stored.universalSites);
-      } catch { result = "operationFailed"; }
+      } catch { result = "settingsLoadFailed"; }
       if (pending.get(origin)?.id !== id) return;
       pending.delete(origin); emit();
       // A finished removal can be taken back while its notice is shown.
@@ -98,7 +98,7 @@
         if (!initialLibraryChanged) sites = HdmSites.normalizeLibrary(stored.universalSites);
         settings = { ...settings, ...storedSettings, ...initialSettingsChanges }; emit();
         await checkAccess();
-      } catch { currentSite = { supported: false }; emit(); notice("operationFailed"); }
+      } catch { currentSite = { supported: false }; emit(); notice("settingsLoadFailed"); }
       finally { initializing = false; }
     }
 

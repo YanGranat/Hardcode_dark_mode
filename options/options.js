@@ -6,6 +6,7 @@ const fileInput = document.getElementById("file");
 const statusEl = document.getElementById("status");
 let language = HdmLanguages.detect(chrome.i18n.getUILanguage());
 let languageChanged = false;
+let statusMessage = null;
 
 const translate = (key, values) => HdmPopupText.translate(language, key, values);
 
@@ -13,9 +14,11 @@ function applyLanguage(next) {
   language = HdmPopupText.normalizeLanguage(next);
   document.documentElement.lang = language;
   for (const element of document.querySelectorAll("[data-i18n]")) element.textContent = translate(element.dataset.i18n);
+  if (statusMessage) statusEl.textContent = translate(statusMessage.key, statusMessage.values);
 }
 
 function report(key, values, failed = false) {
+  statusMessage = { key, values };
   statusEl.textContent = translate(key, values);
   statusEl.classList.toggle("error", failed);
 }

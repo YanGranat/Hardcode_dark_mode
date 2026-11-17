@@ -34,14 +34,14 @@ const languageOptions = HdmLanguages.options.map(({ code, label }) => {
 });
 const modeButtons = [...document.querySelectorAll("[data-mode]")];
 
-let currentLanguage = "en", pickerPending = false, toastTimer = null;
+let currentLanguage = "en", pickerPending = false, toastTimer = null, toastNotice = null;
 const model = HdmPopupState.create(chrome, next => {
   state = next;
   applyLanguage(state.settings.language);
   renderCurrentSite();
   renderLibrary();
-}, (key, detail) => showToast(translate(key), detail?.removed
-  ? { label: translate("undo"), run: () => model.restore(detail.removed) } : null));
+}, (key, detail) => showToast(key, {}, detail?.removed
+  ? { key: "undo", run: () => model.restore(detail.removed) } : null));
 let state = model.snapshot();
 
 function translate(key, values) { return HdmPopupText.translate(currentLanguage, key, values); }
@@ -67,26 +67,33 @@ function applyLanguage(language) {
   document.getElementById("language-label").textContent = currentLanguage.toUpperCase();
   languageEl.setAttribute("aria-label", `${translate("languageSelector")}: ${selectedLanguage.label}`);
   languageOptions.forEach(button => button.setAttribute("aria-checked", String(button.dataset.language === currentLanguage)));
+  renderToast();
 }
 
 function hideToast() {
   clearTimeout(toastTimer);
+  toastNotice = null;
   toastEl.classList.remove("show", "has-action");
   toastActionEl.hidden = true;
   toastActionEl.onclick = null;
 }
 
-// The toast owns its text: nothing else may rewrite it while it is visible.
-function showToast(message, action = null) {
-  toastTextEl.textContent = message;
+function renderToast() {
+  if (!toastNotice) return;
+  toastTextEl.textContent = translate(toastNotice.key, toastNotice.values);
+  toastActionEl.textContent = toastNotice.action ? translate(toastNotice.action.key) : "";
+}
+
+function showToast(key, values = {}, action = null) {
+  toastNotice = { key, values, action };
+  renderToast();
   toastActionEl.hidden = !action;
-  toastActionEl.textContent = action ? action.label : "";
   toastActionEl.onclick = action ? () => { hideToast(); action.run(); } : null;
   toastEl.classList.toggle("has-action", Boolean(action));
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
   // Longer messages stay long enough to be read; an offered action stays longer.
-  toastTimer = setTimeout(hideToast, action ? 6000 : Math.max(1800, Math.min(7000, message.length * 60)));
+  toastTimer = setTimeout(hideToast, action ? 6000 : Math.max(1800, Math.min(7000, toastTextEl.textContent.length * 60)));
 }
 
 function canPickElement() {
@@ -240,9 +247,9 @@ function createRuleRow(kind) {
     remove.disabled = true;
     try {
       await model.removeRule(kind, row.rule);
-      showToast(translate("exclusionRemoved"));
+      showToast("exclusionRemoved");
     }
-    catch { showToast(translate("operationFailed")); }
+    catch { showToast("operationFailed"); }
     finally { remove.disabled = false; restoreFocus(); }
   });
   heading.append(label, toggle, remove);
@@ -268,7 +275,7 @@ function createRuleRow(kind) {
     try {
       await model.updateRule(kind, row.rule, { name: submitted }, row.parentRule);
       if ((row.rule.name || "") === submitted.trim() && input.value === submitted) row.dirty = false;
-    } catch { showToast(translate("operationFailed")); }
+    } catch { showToast("operationFailed"); }
     finally { row.saving = false; renderExclusions(); }
   });
   const show = document.createElement("button"); show.type = "button"; show.className = "rule-show";
@@ -276,7 +283,7 @@ function createRuleRow(kind) {
     if (row.showing) return;
     row.showing = true; show.disabled = true;
     try { await model.showRule(kind, row.rule, currentLanguage, row.parentRule); window.close(); }
-    catch (error) { showToast(translate(error.message === "editor_open" ? "editorOpen" : "pickerFailed")); }
+    catch (error) { showToast(error.message === "editor_open" ? "editorOpen" : "matchesFailed"); }
     finally { row.showing = false; show.disabled = !state.currentAccess || model.isPending(state.currentSite.origin); }
   });
   const childTitle = document.createElement("div"); childTitle.className = "rule-children-title";
@@ -457,8 +464,8 @@ librarySortOptions.forEach(option => option.addEventListener("click", async () =
 
 const backupMenu = createMenu(libraryBackupEl, libraryBackupMenuEl);
 async function runBackup(operation, success, failure) {
-  try { showToast(translate(success, { count: await operation() })); }
-  catch (error) { showToast(translate(error.message === "invalid_file" ? "backupInvalid" : failure)); }
+  try { showToast(success, { count: await operation() }); }
+  catch (error) { showToast(error.message === "invalid_file" ? "backupInvalid" : failure); }
 }
 libraryBackupMenuEl.addEventListener("click", event => {
   const action = event.target.closest("[data-backup]")?.dataset.backup;
@@ -486,7 +493,7 @@ async function startPicker(rule = null) {
     await model.pick(rule, currentLanguage);
     window.close();
   } catch (error) {
-    showToast(translate({ editor_open: "editorOpen", selector_unavailable: "ruleNotOnPage" }[error.message] || "pickerFailed"));
+    showToast({ editor_open: "editorOpen", selector_unavailable: "ruleNotOnPage" }[error.message] || "pickerFailed");
   }
   finally { pickerPending = false; pickElement.disabled = !canPickElement(); document.querySelectorAll('.rule-edit').forEach(button => button.disabled = !canPickElement()); }
 }
