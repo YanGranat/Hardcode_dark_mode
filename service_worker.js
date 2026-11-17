@@ -45,16 +45,22 @@ function registrationsFor(site) {
   ];
 }
 
+function sitesWithAccess(sites) {
+  return Promise.all(sites.map(async site => ({ ...site, enabled: site.enabled && await hasAccess(site) })));
+}
+
 async function syncRegistrations(sites) {
-  const effective = await Promise.all(sites.map(async site => ({ ...site, enabled: site.enabled && await hasAccess(site) })));
+  const effective = await sitesWithAccess(sites);
   const desired = effective.filter((site) => site.enabled).flatMap(registrationsFor);
   const current = await chrome.scripting.getRegisteredContentScripts();
   const desiredIds = new Set(desired.map((script) => script.id));
   const currentIds = new Set(current.map((script) => script.id));
+  const registered = new Map(current.map(script => [script.id, script]));
   const obsolete = current.filter((script) => HdmSites.ownsRegistration(script.id) &&
     !desiredIds.has(script.id)).map((script) => script.id);
   if (obsolete.length) await chrome.scripting.unregisterContentScripts({ ids: obsolete });
-  const updates = desired.filter((script) => currentIds.has(script.id));
+  const updates = desired.filter(script => currentIds.has(script.id) &&
+    Object.entries(script).some(([key, value]) => JSON.stringify(registered.get(script.id)[key]) !== JSON.stringify(value)));
   const additions = desired.filter((script) => !currentIds.has(script.id));
   if (updates.length) await chrome.scripting.updateContentScripts(updates);
   if (additions.length) await chrome.scripting.registerContentScripts(additions);
@@ -63,16 +69,19 @@ async function syncRegistrations(sites) {
 
 // The probe finds a listed origin even inside an unlisted tab. Actual theme
 // assets are subsequently injected only into matching, navigation-stable IDs.
-function documentAddress() {
+function documentAddress(origins) {
   // Retire a stale themed controller before reinjection without dispatching a
   // page-visible event in ordinary unthemed documents.
-  if (document.documentElement?.classList.contains("dmx-site")) document.dispatchEvent(new Event("hdm-controller-replace"));
-  if (/^https?:$/.test(location.protocol)) return location.href;
-  if (/^(about:|blob:|data:)$/.test(location.protocol)) {
-    if (location.origin !== "null") return location.origin;
-    return location.ancestorOrigins[0] || "";
+  let address = "";
+  if (/^https?:$/.test(location.protocol)) address = location.href;
+  else if (/^(about:|blob:|data:)$/.test(location.protocol)) {
+    address = location.origin !== "null" ? location.origin : location.ancestorOrigins[0] || "";
   }
-  return "";
+  if (/^https?:\/\//.test(address) && document.documentElement?.classList.contains("dmx-site")) {
+    const url = new URL(address);
+    if (origins.includes(`${url.protocol}//${url.hostname.toLowerCase()}`)) document.dispatchEvent(new Event("hdm-controller-replace"));
+  }
+  return address;
 }
 
 function isDepartedDocument(error) {
@@ -118,7 +127,7 @@ async function applyToOpenDocuments(sites, changedOrigins, isCurrent) {
     try {
       documents = await run(() => chrome.scripting.executeScript({
         target: { tabId: tab.id, allFrames: true }, func: documentAddress,
-        injectImmediately: true
+        args: [[...changedOrigins]], injectImmediately: true
       }));
     } catch (error) {
       if (!isDepartedDocument(error) && !/Cannot access|Missing host permission|showing error page|apply_superseded/i.test(String(error.message))) report();
@@ -357,7 +366,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     ? getUniversalSites().then(sites => ({ sites }))
     : enqueue(() => handleMessage(message));
   result
-    .then(async ({ application, ...result }) => sendResponse({ ok: true, ...result, warning: await application }))
+    .then(async ({ application, ...result }) => {
+      const reply = popup ? result : { ...result, sites: result.sites?.filter(site => site.origin === message.origin) };
+      sendResponse({ ok: true, ...reply, warning: await application });
+    })
     .catch((error) => sendResponse({ ok: false, error: error.message }));
   return true;
 });
@@ -368,6 +380,20 @@ function scheduleReconciliation() {
     console.warn("Hardcode Dark Mode: could not reconcile site settings.");
   });
 }
+
+// Session state survives worker suspension, but is cleared when the extension
+// is disabled or reloaded. Existing documents then need their controller back.
+const sessionRestoration = enqueue(async () => {
+  const { documentsRestored } = await chrome.storage.session.get({ documentsRestored: false });
+  if (documentsRestored) return;
+  const sites = await getUniversalSites();
+  const effective = await sitesWithAccess(sites);
+  const result = { application: scheduleApplication(effective, new Set(sites.map(site => site.origin))) };
+  await chrome.storage.session.set({ documentsRestored: true });
+  return result;
+}).then(result => result?.application).catch(() => {
+  console.warn("Hardcode Dark Mode: could not restore open documents.");
+});
 
 chrome.runtime.onInstalled.addListener(scheduleReconciliation);
 chrome.runtime.onStartup.addListener(scheduleReconciliation);

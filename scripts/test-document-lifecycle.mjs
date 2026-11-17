@@ -19,6 +19,7 @@ await harness.run(async () => {
   const outsider = await context.newPage();
   await outsider.goto(`http://localhost:${server.address().port}`);
   await outsider.evaluate(() => {
+    document.documentElement.classList.add("dmx-site");
     window.extensionTraces = [];
     for (const type of ["hdm-controller-replace", "hdm-shadow-root", "hdm-shadow-enable", "hdm-shadow-disable"]) {
       document.addEventListener(type, () => window.extensionTraces.push(type), true);
@@ -41,6 +42,25 @@ await harness.run(async () => {
   const blank = page.frames().find(frame => frame.url() === "about:blank");
   await blank.waitForFunction(() => document.documentElement.classList.contains("dmx-on"));
   assert.equal(await blank.locator(shim).count(), 0, "transparent embedded frames retain their canvas");
+  const backgroundChurn = await page.evaluate(async () => {
+    const original = document.querySelector("[data-hdm-universal-body-style]");
+    let writes = 0;
+    const observer = new MutationObserver(records => {
+      for (const record of records) for (const node of [...record.addedNodes, ...record.removedNodes]) {
+        if (node === original) writes++;
+      }
+    });
+    observer.observe(document, { subtree: true, childList: true });
+    for (let index = 0; index < 16; index++) {
+      document.body.style.setProperty("--progress", String(index));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    observer.disconnect();
+    return { writes, retained: original === document.querySelector("[data-hdm-universal-body-style]") };
+  });
+  assert.equal(backgroundChurn.writes, 0, "unrelated body style changes must not detach the fallback stylesheet");
+  assert.equal(backgroundChurn.retained, true);
   for (const target of ["body", "html"]) {
     await page.evaluate(target => document.querySelector(target).style.backgroundColor = "rgb(12, 34, 56)", target);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -107,6 +127,31 @@ await harness.run(async () => {
   await page.evaluate(() => new Promise(resolve => { let frames = 0; function next() { if (++frames === 12) resolve(); else requestAnimationFrame(next); } requestAnimationFrame(next); }));
   assert.equal(await page.evaluate(() => { window.probe.disconnect(); return window.ownedWrites; }), 0);
   console.log("PASS unchanged protected geometry performs no DOM writes");
+  await popup.evaluate(tabId => chrome.scripting.executeScript({ target: { tabId }, func: () => {
+    globalThis.__hdmStyleReads = 0;
+    const original = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = function (...args) { globalThis.__hdmStyleReads++; return original.apply(this, args); };
+  } }), tabId);
+  await page.evaluate(() => new Promise(resolve => {
+    let frames = 0;
+    function next() { if (++frames === 16) resolve(); else requestAnimationFrame(next); }
+    requestAnimationFrame(next);
+  }));
+  const styleReads = await popup.evaluate(async tabId => (await chrome.scripting.executeScript({
+    target: { tabId }, func: () => globalThis.__hdmStyleReads
+  }))[0].result, tabId);
+  assert.equal(styleReads, 0, "idle cutouts reuse live computed declarations without rebuilding their plan");
+  await page.evaluate(() => {
+    const style = document.createElement("style"); style.id = "geometry-style";
+    style.textContent = "#work { perspective: none; }"; document.head.append(style);
+  });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.evaluate(() => document.getElementById("geometry-style").sheet.cssRules[0].style.perspective = "100px");
+  await page.waitForFunction(() => document.getElementById("work").getAttribute("data-hdm-cutout") === "blocked");
+  await page.evaluate(() => document.getElementById("geometry-style").sheet.cssRules[0].style.perspective = "none");
+  await page.waitForFunction(() => document.getElementById("work").getAttribute("data-hdm-cutout") === "mask");
+  await page.locator("#geometry-style").evaluate(element => element.remove());
+  console.log("PASS cached geometry retains CSSOM-only safety transitions");
 
   for (const [attribute, path, value] of [
     ["class", '[cl\\61 ss~="enabled"]', "enabled"],
@@ -150,6 +195,22 @@ await harness.run(async () => {
   await send({ type: "hdm-universal-set-mode", origin: "http://127.0.0.1", mode: "selected" });
   console.log("PASS attribute and inline-style selectors update and release matches in both modes");
 
+  const failedRefresh = await popup.evaluate(async tabId => (await chrome.scripting.executeScript({
+    target: { tabId }, func: async () => {
+      const original = chrome.runtime.sendMessage;
+      let failed = false;
+      chrome.runtime.sendMessage = function (...args) {
+        if (!failed && args[0]?.type === "hdm-document-access") { failed = true; return Promise.reject(Error("worker unavailable")); }
+        return original.apply(this, args);
+      };
+      try { return await globalThis.__hardcodeDarkModeUniversalController.refresh(); }
+      finally { chrome.runtime.sendMessage = original; }
+    }
+  }))[0].result, tabId);
+  assert.equal(failedRefresh, false);
+  await page.waitForFunction(() => document.documentElement.classList.contains("dmx-on"));
+  console.log("PASS a transient worker failure recovers without another settings change");
+
   await page.evaluate(() => { window.documentToken = crypto.randomUUID(); });
   const token = await page.evaluate(() => window.documentToken);
   const extension = `chrome-extension://${new URL(worker.url()).host}`;
@@ -177,6 +238,18 @@ await harness.run(async () => {
   assert.equal(await page.evaluate(() => window.documentToken), token, "extension replacement does not navigate the page");
   assert.deepEqual(pageErrors, [], "document lifecycle changes do not throw into the page");
   console.log("PASS native extension reload retires stale controllers before later toggles");
+  await send({ type: "hdm-universal-set-enabled", origin: "http://127.0.0.1", enabled: true });
+  await page.waitForFunction(() => document.documentElement.classList.contains("dmx-on"));
+  const toggle = detail.locator("extensions-detail-view #enableToggle");
+  for (let index = 0; index < 3; index++) {
+    await toggle.click();
+    await page.evaluate(index => { document.documentElement.classList.add(`disabled-update-${index}`); }, index);
+    await page.waitForFunction(() => !document.documentElement.classList.contains("dmx-on"));
+    await toggle.click();
+    await page.waitForFunction(() => document.documentElement.classList.contains("dmx-on"), null, { timeout: 5000 });
+    assert.equal(await page.evaluate(() => window.documentToken), token, "re-enabling does not reload an open document");
+  }
+  console.log("PASS native extension re-enable restores an open document");
   assert.deepEqual(await outsider.evaluate(() => window.extensionTraces), [],
     "library changes and an extension reload send no event to a site outside the library and leave its page untouched");
   console.log("PASS a site outside the library observes nothing");

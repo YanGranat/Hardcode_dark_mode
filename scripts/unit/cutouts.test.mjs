@@ -131,6 +131,64 @@ test("cleanup restores prior owner state and removes unused SVG resources", () =
   assert.equal(owner.style.getPropertyValue("--hdm-cutout-filter"), "updated-by-page", "cleanup must preserve a newer page-owned change");
 });
 
+test("geometry refresh reuses settled styles and filter resources while retaining live inputs", () => {
+  const h = fixture(), owner = h.node(), target = h.node(owner);
+  target.box = box(20, 10, 40, 30);
+  h.api.paint(new Map([[owner, 90]]), [target]);
+  const filter = h.filters()[0], before = { ...h.counts };
+  for (let index = 0; index < 12; index++) assert.equal(h.api.updateGeometry(), true);
+  assert.equal(h.counts.styles, before.styles, "idle frames must not reacquire computed styles");
+  assert.equal(h.counts.ancestry, before.ancestry, "idle frames must not rebuild owner paths");
+  assert.equal(h.counts.attributes, before.attributes);
+  assert.equal(h.counts.tree, before.tree);
+  target.box = box(30, 10, 40, 30);
+  h.api.updateGeometry();
+  assert.equal(h.filters()[0], filter);
+  assert.equal(filter.children.find(node => node.localName === "feFlood").getAttribute("x"), "0.3");
+  target.css.rotate = "180deg";
+  h.api.updateGeometry();
+  assert.equal(owner.getAttribute("data-hdm-cutout"), "blocked", "same-size rotation still changes protection safety");
+  target.css.rotate = "none";
+  h.api.updateGeometry();
+  assert.equal(owner.getAttribute("data-hdm-cutout"), "mask");
+  h.document.URL = "http://fixture.test/next";
+  h.api.updateGeometry();
+  assert.match(owner.style.getPropertyValue("--hdm-cutout-filter"), /\/next#hdm-cutout-/);
+  h.api.clear();
+  assert.equal(h.api.updateGeometry(), false);
+  assert.equal(h.filters().length, 0, "a cleared plan must not revive its filters");
+});
+
+test("geometry refresh notices clipping metrics and disconnection without changing outer bounds", () => {
+  const h = fixture(), owner = h.node(), clip = h.node(owner), target = h.node(clip);
+  clip.css.overflowX = clip.css.overflowY = "hidden";
+  clip.clientWidth = clip.clientHeight = 80;
+  target.box = box(20, 10, 60, 30);
+  h.api.paint(new Map([[owner, 90]]), [target]);
+  const flood = () => h.filters()[0].children.find(node => node.localName === "feFlood");
+  assert.equal(flood().getAttribute("width"), "0.6");
+  clip.clientWidth = 60;
+  h.api.updateGeometry();
+  assert.equal(flood().getAttribute("width"), "0.4", "scrollbar or viewport metrics can change independently");
+  target.remove();
+  assert.equal(h.api.updateGeometry(), false);
+  assert.equal(owner.getAttribute("data-hdm-cutout"), null);
+});
+
+test("settled geometry restores removed resources and externally replaced owner state", () => {
+  const h = fixture(), owner = h.node(), target = h.node(owner);
+  target.box = box(20, 10, 40, 30);
+  h.api.paint(new Map([[owner, 90]]), [target]);
+  h.filters()[0].remove();
+  h.api.updateGeometry();
+  assert.equal(h.filters().length, 1);
+  owner.removeAttribute("data-hdm-cutout");
+  owner.style.removeProperty("--hdm-cutout-filter");
+  h.api.updateGeometry();
+  assert.equal(owner.getAttribute("data-hdm-cutout"), "mask");
+  assert.match(owner.style.getPropertyValue("--hdm-cutout-filter"), /^url\(/);
+});
+
 test("unsupported transforms, protected ancestors and overflow suspension never invert protected areas", () => {
   const h = fixture(), owner = h.node(), target = h.node(owner), nested = h.node(target);
   target.box = box(20, 10, 40, 30); nested.box = box(20, 10, 10, 10);

@@ -37,6 +37,8 @@
     const exclusions = HdmRulePainter.create(() => [...shadowStyles.keys()]);
     const inclusions = HdmRulePainter.create(() => [...shadowStyles.keys()], "invert");
     let bodyStyle = null;
+    let retryTimer = null, retryAttempt = 0;
+    const retryDelays = [250, 1000, 3000];
     let disposed = false;
     function alive() {
       let valid = false;
@@ -47,6 +49,7 @@
     function dispose() {
       if (disposed) return;
       disposed = true; revision++;
+      clearTimeout(retryTimer); retryTimer = null;
       matchViewer?.close();
       disable();
       try { chrome.storage?.onChanged.removeListener(onStorage); } catch {}
@@ -97,22 +100,22 @@
         backgroundObserver?.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style"] });
         backgroundObserver?.observe(backgroundBody, { attributes: true, attributeFilter: ["class", "style"] });
       }
-      bodyStyle?.remove();
-      const transparent = (element) => {
-        const color = getComputedStyle(element).backgroundColor;
+      const transparent = (color) => {
         return color === "transparent" || /(?:,|\/)\s*0(?:\.0+)?%?\s*\)$/.test(color);
       };
       // The provisional canvas must not count as the site's own background.
       endBoot();
+      const body = getComputedStyle(document.body), root = getComputedStyle(document.documentElement);
+      const fallbackVisible = bodyStyle?.isConnected && root.backgroundColor === "rgb(255, 255, 255)";
       // Preserve the html background that normally paints through a clear body.
-      if (!transparent(document.body) || !transparent(document.documentElement) ||
-          getComputedStyle(document.documentElement).backgroundImage !== "none" ||
-          getComputedStyle(document.body).backgroundImage !== "none") { bodyStyle = null; return; }
-      if (!bodyStyle) { bodyStyle = document.createElement("style"); bodyStyle.setAttribute(bodyStyleAttribute, ""); }
-      // Paint the otherwise transparent canvas, without overwriting the body's
-      // later site-owned background or layout.
-      bodyStyle.textContent = "@media screen { :where(html.dmx-on.dmx-site-universal:not(.dmx-mode-selected)) { background-color: #fff; } }";
-      (document.head || document.documentElement).appendChild(bodyStyle);
+      if (!transparent(body.backgroundColor) || (!transparent(root.backgroundColor) && !fallbackVisible) ||
+          root.backgroundImage !== "none" || body.backgroundImage !== "none") { bodyStyle?.remove(); bodyStyle = null; return; }
+      if (!bodyStyle) {
+        bodyStyle = document.createElement("style"); bodyStyle.setAttribute(bodyStyleAttribute, "");
+        // Paint only the transparent canvas, below any site-owned background.
+        bodyStyle.textContent = "@media screen { :where(html.dmx-on.dmx-site-universal:not(.dmx-mode-selected)) { background-color: #fff; } }";
+      }
+      if (!bodyStyle.isConnected) (document.head || document.documentElement).appendChild(bodyStyle);
     }
 
     function scan(node) {
@@ -199,8 +202,10 @@
       bodyStyle = null;
     }
 
-    async function refresh() {
+    async function refresh(retrying = false) {
       if (!alive()) return false;
+      clearTimeout(retryTimer); retryTimer = null;
+      if (!retrying) retryAttempt = 0;
       const request = ++revision;
       try {
         const origin = pageOrigin();
@@ -209,6 +214,7 @@
           HdmRequests.send(() => chrome.runtime.sendMessage({ type: "hdm-document-access", origin }), 3000, "timeout")
         ]);
         if (!alive() || request !== revision) return false;
+        retryAttempt = 0;
         const site = HdmSites.normalizeLibrary(stored.universalSites).find(site => site.origin === origin);
         currentSite = site || null; currentAccess = access?.ok === true && access.allowed === true;
         matchViewer?.close();
@@ -220,7 +226,13 @@
         inclusions.set(site?.inclusions, Boolean(active) && mode === "selected", site?.protections);
         return true;
       } catch (error) {
-        if (request === revision) { currentAccess = false; matchViewer?.close(); disable(); }
+        if (alive() && request === revision) {
+          currentAccess = false; matchViewer?.close(); disable();
+          if (retryAttempt < retryDelays.length) retryTimer = setTimeout(() => {
+            retryTimer = null;
+            if (request === revision && alive()) void refresh(true);
+          }, retryDelays[retryAttempt++]);
+        }
         return false;
       }
     }

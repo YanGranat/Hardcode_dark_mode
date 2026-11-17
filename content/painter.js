@@ -98,7 +98,7 @@
       if (!invert || geometryFrame || !active || !geometryNeeded || document.hidden) return;
       geometryFrame = requestAnimationFrame(() => {
         geometryFrame = 0;
-        geometryNeeded = cutouts.paint(owners, protectedTargets, suspendProtection, boundaries) === true;
+        geometryNeeded = cutouts.updateGeometry() === true;
         picker?.geometry();
         trackGeometry();
       });

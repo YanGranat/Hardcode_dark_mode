@@ -1,10 +1,34 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import vm from "node:vm";
 import { clone } from "../support/modules.mjs";
 import { worker } from "../support/worker.mjs";
 const add = url => ({ type: "hdm-universal-add-site", url });
 const remove = origin => ({ type: "hdm-universal-remove-site", origin });
 const toggle = (origin, enabled) => ({ type: "hdm-universal-set-enabled", origin, enabled });
+
+test("document probes notify only changed library origins, including related frames", async () => {
+  const h = worker(), execute = h.api.scripting.executeScript;
+  let probe;
+  h.api.scripting.executeScript = async call => { if (call.func) probe = call; return execute(call); };
+  await h.send(add("https://parent.test"));
+  assert.equal(typeof probe?.func, "function");
+  const cases = [
+    [new URL("https://parent.test:8443/page"), true, 1],
+    [new URL("https://unrelated.test/page"), true, 0],
+    [new URL("https://parent.test/page"), false, 0],
+    [{ protocol: "about:", origin: "null", ancestorOrigins: ["https://parent.test"] }, true, 1],
+    [{ protocol: "about:", origin: "null", ancestorOrigins: ["null"] }, true, 0],
+    [{ protocol: "chrome:", href: "chrome://settings" }, true, 0]
+  ];
+  for (const [location, marked, count] of cases) {
+    const events = [], context = { URL, Event: class { constructor(type) { this.type = type; } },
+      location, args: probe.args,
+      document: { documentElement: { classList: { contains: () => marked } }, dispatchEvent: event => events.push(event.type) } };
+    vm.runInNewContext(`(${probe.func.toString()})(...args)`, context);
+    assert.deepEqual(events, count ? ["hdm-controller-replace"] : []);
+  }
+});
 
 test("document access reads bypass pending mutations and reject foreign senders", async () => {
   const h = worker();
@@ -263,15 +287,70 @@ test("picker writes are limited to their sender origin and cannot mutate other s
   const { send, listener, state } = worker();
   const origin = "https://parent.test";
   await send(add(origin));
+  await send(add("https://child.test"));
   const message = { type: "hdm-exclusion-add", origin, rule: { path: ["#banner"], label: "banner" } };
   const sender = { id: "test", tab: { id: 1 }, url: origin + "/page" };
   assert.equal(listener(message, { ...sender, url: "https://other.test" }, () => assert.fail()), false);
   assert.equal(listener(toggle(origin, false), sender, () => assert.fail()), false);
-  assert.equal((await new Promise(resolve => listener(message, sender, resolve))).ok, true);
+  const reply = await new Promise(resolve => listener(message, sender, resolve));
+  assert.equal(reply.ok, true);
+  assert.deepEqual(reply.sites.map(site => site.origin), [origin], "picker replies contain only their own site's settings");
+  assert.equal((await send({ type: "hdm-universal-get-sites" })).sites.length, 2, "extension pages retain the full library");
   assert.equal(state.sites[0].exclusions.length, 1);
   await send(toggle(origin, false));
   assert.equal((await new Promise(resolve => listener(message, sender, resolve))).ok, false);
   assert.equal((await send({ ...message, rule: { path: ["x".repeat(2049)] } })).ok, false);
+});
+
+test("session restoration finishes after applying assets to retained documents", async () => {
+  const h = worker(1000, undefined, { documentsRestored: false, sites: [{ origin: "https://parent.test", enabled: true }] });
+  const execute = h.api.scripting.executeScript;
+  let releaseProbe, completed = false;
+  h.api.scripting.executeScript = arg => arg.func
+    ? new Promise(resolve => { releaseProbe = () => resolve([{ documentId: "parent", result: "https://parent.test" }]); })
+    : execute(arg);
+  h.ready.then(() => { completed = true; });
+  try {
+    for (let turn = 0; !releaseProbe && turn < 100; turn++) await new Promise(resolve => setImmediate(resolve));
+    assert.equal(typeof releaseProbe, "function", "restoration must reach the retained document");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.state.scripts.length, 0, "session restoration does not rewrite persistent registrations");
+    assert.equal(completed, false, "restoration includes applying assets to existing pages");
+  } finally { releaseProbe?.(); await h.ready; }
+  assert.equal(h.state.inserted.length, 1);
+  assert.equal(h.state.executed.length, 2);
+  assert.equal(h.state.documentsRestored, true);
+});
+
+test("a fresh extension session restores documents without an activation event", async () => {
+  const h = worker(30, undefined, { documentsRestored: false, sites: [{ origin: "https://parent.test", enabled: true }] });
+  h.api.scripting.getRegisteredContentScripts = async () => { throw Error("registrations are not ready"); };
+  await h.ready;
+  assert.equal(h.state.inserted.length, 1);
+  assert.equal(h.state.scripts.length, 0);
+  assert.equal(h.state.documentsRestored, true);
+});
+
+test("ordinary worker wakeups do not reconcile already restored documents", async () => {
+  const h = worker();
+  let probes = 0;
+  h.api.tabs.query = async () => { probes++; return []; };
+  await h.ready;
+  assert.equal(probes, 0);
+  assert.deepEqual(h.state.executed, []);
+});
+
+test("unchanged registrations are retained while mode changes replace only their own entry", async () => {
+  const h = worker();
+  await h.send(add("https://parent.test"));
+  const updated = [], original = h.api.scripting.updateContentScripts;
+  h.api.scripting.updateContentScripts = async scripts => { updated.push(...clone(scripts)); return original(scripts); };
+  await h.send(add("https://child.test"));
+  assert.equal(updated.length, 0, "adding another site does not rewrite an unchanged registration");
+  await h.send({ type: "hdm-universal-set-mode", origin: "https://parent.test", mode: "selected" });
+  assert.equal(updated.length, 1);
+  assert.equal(updated[0].id, "hdm-universal-https://parent.test");
+  assert.equal(updated[0].js.includes("content/boot.js"), false);
 });
 
 test("legacy global protections remain independent, readable, removable and rollback-safe", async () => {

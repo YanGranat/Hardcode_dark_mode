@@ -6,6 +6,8 @@
   function plan(owners, protections, suspend = false, boundaries = new Set()) {
     if (!owners.size || (!protections.length && !suspend)) return { updates: new Map(), trackGeometry: false };
     const updates = new Map(), styles = new Map(), bounds = new Map(), protectedNodes = new Set(protections);
+    const styleSamples = new Map(), metricSamples = new Map(), boundSamples = new Map();
+    const documentURL = document.URL;
     const ownerProtections = new Map(), chains = new Map(), ownerPaths = new Map(), families = new Map();
     for (const owner of owners.keys()) {
       if (!owner.isConnected) continue;
@@ -34,13 +36,46 @@
     let rectBudget = MAX_RECTS, filterBudget = MAX_FILTERS;
     let geometryRelated = false;
     const style = node => {
-      if (!styles.has(node)) styles.set(node, getComputedStyle(node));
+      if (!styles.has(node)) {
+        const css = getComputedStyle(node), values = new Map();
+        // Computed declarations remain live when CSSOM or animation changes them.
+        styleSamples.set(node, { css, values });
+        styles.set(node, new Proxy(css, { get(target, key) {
+          const value = Reflect.get(target, key, target);
+          values.set(key, value);
+          return value;
+        } }));
+      }
       return styles.get(node);
     };
+    const dimensions = node => {
+      const values = Object.fromEntries(["offsetWidth", "offsetHeight", "clientLeft", "clientTop", "clientWidth", "clientHeight"]
+        .map(key => [key, node[key]]));
+      metricSamples.set(node, values);
+      return values;
+    };
     const rect = node => {
-      if (!bounds.has(node)) bounds.set(node, node.getBoundingClientRect());
+      if (!bounds.has(node)) {
+        const value = node.getBoundingClientRect();
+        bounds.set(node, value);
+        boundSamples.set(node, [value.left, value.top, value.right, value.bottom, value.width, value.height]);
+      }
       return bounds.get(node);
     };
+    function changed() {
+      if (document.URL !== documentURL) return true;
+      for (const [node, values] of boundSamples) {
+        if (!node.isConnected) return true;
+        const box = node.getBoundingClientRect();
+        if ([box.left, box.top, box.right, box.bottom, box.width, box.height].some((value, index) => value !== values[index])) return true;
+      }
+      for (const [node, { css, values }] of styleSamples) {
+        if (!node.isConnected) return true;
+        for (const [key, value] of values) if (css[key] !== value) return true;
+      }
+      for (const [node, values] of metricSamples) for (const [key, value] of Object.entries(values)) if (node[key] !== value) return true;
+      return false;
+    }
     const validRect = value => [value.left, value.top, value.right, value.bottom, value.width, value.height].every(Number.isFinite) && value.width > 0 && value.height > 0;
     const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     // HTML paint bounds and filter primitives share a CSS-pixel raster grid.
@@ -117,10 +152,11 @@
               blocked = true; break;
             }
           } else {
-            if (!node.offsetWidth || !node.offsetHeight) { blocked = true; break; }
-            const scaleX = clip.width / node.offsetWidth, scaleY = clip.height / node.offsetHeight;
-            clipLeft += node.clientLeft * scaleX; clipRight = clip.left + (node.clientLeft + node.clientWidth) * scaleX;
-            clipTop += node.clientTop * scaleY; clipBottom = clip.top + (node.clientTop + node.clientHeight) * scaleY;
+            const size = dimensions(node);
+            if (!size.offsetWidth || !size.offsetHeight) { blocked = true; break; }
+            const scaleX = clip.width / size.offsetWidth, scaleY = clip.height / size.offsetHeight;
+            clipLeft += size.clientLeft * scaleX; clipRight = clip.left + (size.clientLeft + size.clientWidth) * scaleX;
+            clipTop += size.clientTop * scaleY; clipBottom = clip.top + (size.clientTop + size.clientHeight) * scaleY;
           }
           if (clipX) { left = Math.max(left, clipLeft); right = Math.min(right, clipRight); }
           if (clipY) { top = Math.max(top, clipTop); bottom = Math.min(bottom, clipBottom); }
@@ -145,7 +181,7 @@
       if (!blocked) { rectBudget -= rects.length; filterBudget--; }
       updates.set(owner, { amount, rects, blocked });
     }
-    return { updates, trackGeometry: geometryRelated };
+    return { updates, trackGeometry: geometryRelated, changed };
   }
 
   global.HdmCutoutGeometry = { plan };

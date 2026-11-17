@@ -1,8 +1,9 @@
 import vm from "node:vm";
 import { read, clone } from "./modules.mjs";
 
-export function worker(applyTimeout = 30, now = () => Date.now()) {
-  const state = { sites: [], scripts: [], fail: null, inserted: [], removed: [], executed: [] };
+export function worker(applyTimeout = 30, now = () => Date.now(), session = {}) {
+  const state = { sites: session.sites || [], documentsRestored: session.documentsRestored ?? true,
+    scripts: [], fail: null, inserted: [], removed: [], executed: [] };
   let listener;
   const events = new Map();
   const event = name => ({ addListener(listener) { events.set(name, listener); } });
@@ -18,6 +19,9 @@ export function worker(applyTimeout = 30, now = () => Date.now()) {
         if (state.fail === "storage") { state.fail = null; throw Error("disk failure"); }
         state.sites = clone(value.universalSites);
       }
+    }, session: {
+      get: async () => ({ documentsRestored: state.documentsRestored }),
+      set: async value => { state.documentsRestored = value.documentsRestored; }
     } },
     tabs: { query: async () => [{ id: 1, url: "https://parent.test" }], sendMessage: async () => ({}) },
     scripting: {
@@ -51,5 +55,6 @@ export function worker(applyTimeout = 30, now = () => Date.now()) {
   vm.runInContext(read("service_worker.js"), context);
   const sender = { id: "test", url: "chrome-extension://test/popup/popup.html" };
   const send = message => new Promise(resolve => listener(message, sender, resolve));
-  return { state, send, listener, api, fire: name => events.get(name)?.() };
+  return { state, send, listener, api, ready: vm.runInContext("sessionRestoration", context),
+    fire: name => events.get(name)?.() };
 }

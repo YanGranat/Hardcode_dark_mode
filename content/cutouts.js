@@ -9,6 +9,7 @@
   function create() {
     const entries = new Map(), definitions = new Map();
     let blockedCount = 0;
+    let lastPlan = null, lastInput = null;
 
     function svgElement(name, attributes = {}) {
       const element = document.createElementNS(NS, name);
@@ -110,12 +111,15 @@
     }
 
     function clear() {
+      lastPlan = lastInput = null;
       for (const [owner, entry] of entries) release(owner, entry);
       pruneDefinitions(); blockedCount = 0;
     }
 
     function paint(owners, protections, suspend = false, boundaries = new Set()) {
-      const { updates, trackGeometry } = HdmCutoutGeometry.plan(owners, protections, suspend, boundaries);
+      lastPlan = HdmCutoutGeometry.plan(owners, protections, suspend, boundaries);
+      lastInput = [owners, protections, suspend, boundaries];
+      const { updates, trackGeometry } = lastPlan;
       blockedCount = 0;
       for (const [owner, { amount, rects, blocked }] of updates) {
         if (blocked) blockedCount++;
@@ -124,6 +128,14 @@
       for (const [owner, entry] of entries) if (!updates.has(owner)) release(owner, entry);
       pruneDefinitions();
       return trackGeometry;
+    }
+
+    function updateGeometry() {
+      if (!lastPlan?.trackGeometry) return false;
+      const damaged = [...entries].some(([owner, entry]) =>
+        (entry.filter && !entry.filter.isConnected) || owner.getAttribute(MARKER) !== entry.marker ||
+        owner.style.getPropertyValue(PROPERTY) !== entry.value || owner.style.getPropertyPriority(PROPERTY) !== "important");
+      return damaged || lastPlan.changed() ? paint(...lastInput) : true;
     }
 
     function blocked(roots) {
@@ -140,7 +152,7 @@
       return false;
     }
 
-    return { paint, clear, blocked };
+    return { paint, updateGeometry, clear, blocked };
   }
 
   global.HdmCutouts = { create };
